@@ -24,7 +24,7 @@ const char* smtp_host = "smtp.gmail.com";
 const int smtp_port = 465;
 const char* author_email = "ecothingsupv@gmail.com";
 const char* author_password = "fwlvzfcgyzzrleej";
-const char* recipient_email = "bart1019@gmail.com";
+const char* recipient_email = "piotrek.laszkiewicz23@gmail.com";
 
 //Email text content
 const String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email.";
@@ -51,12 +51,12 @@ void setup() {
 
   Serial.begin(9600);
 
-  setupCameraWiFi();
-
   if(!SPIFFS.begin()){ Serial.println("Error initializing SPIFFS!"); }  
 }
 
 void loop() {
+  setupCameraWiFi();
+
   while (!motionDetected){
     motionDetected = digitalRead(PIR_PIN);
     delay(1500);
@@ -75,7 +75,7 @@ void loop() {
     emailSent = sendEmail();
   }
 
-  setupCameraWiFi();
+  Serial.println("Email was sent");
 
   imageObtainSuccess = false;
   motionDetected = false;
@@ -140,15 +140,15 @@ void setupRouterWiFi(void){
     delay(1000);
     Serial.println("Connecting to WiFi...");
   }
-  Serial.print("Connected to your WiFi network");
+  Serial.println("Connected to your WiFi network");
 }
 
 boolean sendEmail(void){
 
   boolean status;
 
-  smtp.debug(1);
-  smtp.callback(smtpCallback);
+  smtp.debug(0);
+  //smtp.callback(smtpCallback); uncomment to see callbacks in serial monitor
 
   //Email session configuration
   ESP_Mail_Session session;
