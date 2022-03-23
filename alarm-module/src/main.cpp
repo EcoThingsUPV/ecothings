@@ -1,8 +1,8 @@
 #include <Arduino.h>
-#include "WiFi.h"
-#include "SPIFFS.h"
+#include <WiFi.h>
+#include <SPIFFS.h>
 #include <ESPAsyncWebServer.h>
-#include "esp_camera.h"
+#include <esp_camera.h>
 #include <FS.h>
 
 //image file name for SPIFFS
@@ -30,6 +30,8 @@
 boolean takeNewPhoto = false;
 const char* ssid = "ESP32-cam";
 const char* password =  "123456789";
+
+int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the access request
  
 AsyncWebServer server(80);
 
@@ -56,8 +58,23 @@ void setup(){
 
   server.on("/img", HTTP_GET, [](AsyncWebServerRequest *request){
     takeNewPhoto = true;
+    accessAnswer = -1;
     delay(1000);
     request->send(SPIFFS, FILE_PHOTO, "image/jpeg");
+  });
+
+  server.on("/access", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", String(accessAnswer));
+  });
+
+  server.on("/access_denied", HTTP_GET, [](AsyncWebServerRequest *request){
+    accessAnswer = 0;
+    request->send(200, "text/plain", "You have denied the access");
+  });
+
+  server.on("/access_granted", HTTP_GET, [](AsyncWebServerRequest *request){
+    accessAnswer = 1;
+    request->send(200, "text/plain", "You have granted the access");
   });
 
   server.begin();

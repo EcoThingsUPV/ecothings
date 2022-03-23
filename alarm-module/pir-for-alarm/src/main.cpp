@@ -36,15 +36,19 @@ const char* author_password = "fwlvzfcgyzzrleej";
 const char* recipient_email = "piotrek.laszkiewicz23@gmail.com";
 
 //Email text content
-const String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email.";
+const String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email. Please connect to the ESP32-CAM and choose an action: <br> <a href=\"http://192.168.4.1/access_denied\">Deny access!</a> <br> <a href=\"http://192.168.4.1/access_granted\">Grant access!</a>";
 
-//HTTP request for taking image by camera
+//HTTP request for the communication with the camera
 const char* serverTakePic = "http://192.168.4.1/img";
+const char* serverAccessQuest = "http://192.168.4.1/access";
 
 //Boolean variables to be used in the main loop
 boolean motionDetected = false;
 boolean imageObtainSuccess = false;
 boolean emailSent = false;
+
+//Int variable used for handling the response from the e-mail
+int accessAnswer = -1;
 
 //Function handling for C++
 boolean requestCameraImage(void);
@@ -52,6 +56,7 @@ boolean sendEmail(void);
 void setupCameraWiFi(void);
 void setupRouterWiFi(void);
 void smtpCallback(SMTP_Status status);
+int requestAccessAnswer(void);
 
 SMTPSession smtp;
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
@@ -64,11 +69,12 @@ void setup() {
 
   if(!SPIFFS.begin()){ Serial.println("Error initializing SPIFFS!");}
 
-  tft.initR(INITR_BLACKTAB);  
+  tft.initR(INITR_BLACKTAB);
+
+  setupCameraWiFi();
 }
 
 void loop() {
-  setupCameraWiFi();
 
   while (!motionDetected){
     motionDetected = digitalRead(PIR_PIN);
@@ -92,9 +98,25 @@ void loop() {
 
   Serial.println("Email was sent");
 
+  setupCameraWiFi();
+
+  while (accessAnswer == -1){
+    delay(1000);
+    accessAnswer = requestAccessAnswer(); //-1 means that the ESP32-CAM has not received an answer from the email receipent
+  }
+
+  if (accessAnswer == 0){
+    reader.drawBMP("/acc_d.bmp", tft, 0, 0); //Access denied
+    delay(5000);
+  } else {
+    reader.drawBMP("/acc_g.bmp", tft, 0, 0); //Access granted
+    delay(5000);
+  }
+
   imageObtainSuccess = false;
   motionDetected = false;
   emailSent = false;
+  accessAnswer = -1;
 
   //This part handles the time - so that the image request is not sent more often than pirDelayTime
   int t = millis() - t0;
@@ -132,6 +154,26 @@ boolean requestCameraImage(void){
   f.close();
   http.end();
   return status;
+}
+
+int requestAccessAnswer(void){
+  int answer = -1;
+  HTTPClient http;
+  
+  http.begin(serverAccessQuest);
+  int httpCode = http.GET();
+  if (httpCode > 0) {
+    if (httpCode == HTTP_CODE_OK) {
+      answer = http.getString().toInt();
+      //Serial.println("Answer from ESP32-CAM was received.");
+      }
+  } else {
+    Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    http.end();
+    answer = -1;
+  }
+  http.end();
+  return answer;
 }
 
 void setupCameraWiFi(void){
