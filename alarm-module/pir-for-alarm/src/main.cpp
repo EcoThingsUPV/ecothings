@@ -4,6 +4,15 @@
 #include <SPIFFS.h>
 #include <FS.h>
 #include <ESP_Mail_Client.h>
+#include <Adafruit_I2CDevice.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
+#include <SPIFFS_ImageReader.h>
+
+//Pinout definition for the TFT screen
+#define TFT_DC 2
+#define TFT_RST 4
+#define TFT_CS 5
 
 #define PIR_PIN 26
 #define FILE_PHOTO "/image.jpg"
@@ -45,13 +54,17 @@ void setupRouterWiFi(void);
 void smtpCallback(SMTP_Status status);
 
 SMTPSession smtp;
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+SPIFFS_ImageReader reader;
 
 void setup() {
   pinMode(PIR_PIN, INPUT);
 
   Serial.begin(9600);
 
-  if(!SPIFFS.begin()){ Serial.println("Error initializing SPIFFS!"); }  
+  if(!SPIFFS.begin()){ Serial.println("Error initializing SPIFFS!");}
+
+  tft.initR(INITR_BLACKTAB);  
 }
 
 void loop() {
@@ -59,11 +72,13 @@ void loop() {
 
   while (!motionDetected){
     motionDetected = digitalRead(PIR_PIN);
+    tft.fillScreen(ST77XX_BLACK);
     delay(1500);
   }
 
   Serial.println("Motion detected! Sending image request to ESP32-CAM");
   int t0 = millis();
+  reader.drawBMP("/acc_s.bmp", tft, 0, 0);
 
   while (!imageObtainSuccess){
     imageObtainSuccess = requestCameraImage();
@@ -93,7 +108,7 @@ void loop() {
 boolean requestCameraImage(void){
   boolean status;
   HTTPClient http;
-  File f = SPIFFS.open(FILE_PHOTO, FILE_WRITE);
+  File f = SPIFFS.open(FILE_PHOTO, "w");
   if (!f){
     Serial.println("Failed to create file");
     status = false;
