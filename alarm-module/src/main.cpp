@@ -1,10 +1,11 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
-#include <ESPAsyncWebServer.h>
+//#include <ESPAsyncWebServer.h>
 #include <esp_camera.h>
 #include <FS.h>
 #include <ESP_Mail_Client.h>
+#include <esp_http_server.h>
 
 //image file name for SPIFFS
 #define FILE_PHOTO "/image.jpg"
@@ -55,16 +56,23 @@ boolean emailSent = false;
 String WiFi_IP;
 
 int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the access request
- 
-AsyncWebServer server(80);
 
 //Function handling for C++
 bool checkPhoto( fs::FS &fs );
 void capturePhotoSaveSpiffs(void);
 void setupAP(void);
 void smtpCallback(SMTP_Status status);
+void startServer();
+void setupCamera(void);
+
 String setupWiFi(void);
+
 boolean sendEmail(String WiFi_IP);
+
+esp_err_t img_get_handler(httpd_req_t *req);
+esp_err_t access_get_handler(httpd_req_t *req);
+esp_err_t access_granted_get_handler(httpd_req_t *req);
+esp_err_t access_denied_get_handler(httpd_req_t *req);
 
 SMTPSession smtp;
 
@@ -82,28 +90,52 @@ void setup(){
     Serial.println("SPIFFS failed to initialize!");
   }
 
-  server.on("/img", HTTP_GET, [](AsyncWebServerRequest *request){
-    takeNewPhoto = true;
-    accessAnswer = -1;
-    request->send(200, "text/plain", "OK");
-  });
+  setupCamera();
 
-  server.on("/access", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", String(accessAnswer));
-  });
+  startServer();
+}
 
-  server.on("/access_denied", HTTP_GET, [](AsyncWebServerRequest *request){
-    accessAnswer = 0;
-    request->send(200, "text/plain", "You have denied the access");
-  });
+void loop(){
+  if (takeNewPhoto){
+    capturePhotoSaveSpiffs();
 
-  server.on("/access_granted", HTTP_GET, [](AsyncWebServerRequest *request){
-    accessAnswer = 1;
-    request->send(200, "text/plain", "You have granted the access");
-  });
+    while (!emailSent){
+      if (WiFi.status() != WL_CONNECTED){
+        WiFi_IP = setupWiFi();
+      }
+      Serial.println("Sending the email...");
+      emailSent = sendEmail(WiFi_IP);
+    }
+    Serial.println("Email was sent successfully!");
 
-  server.begin();
+    emailSent = false;
+    takeNewPhoto = false;
+  }
 
+  if (WiFi.status() != WL_CONNECTED){
+    WiFi_IP = setupWiFi();
+  }
+
+  delay(500);
+
+}
+
+void setupAP(void){
+  Serial.println("Setting up AP...");
+
+  WiFi.softAP(ap_ssid, ap_password, 1, 1);
+  delay(100);
+
+  if (!WiFi.softAPConfig(AP_local_IP, AP_gateway, AP_subnet)) {
+    Serial.println("AP configuration failed.");
+  }
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP setup with IP address: ");
+  Serial.println(IP);
+}
+
+void setupCamera(void){
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -144,44 +176,6 @@ void setup(){
   }
   // drop down frame size for higher initial frame rate
   s->set_framesize(s, FRAMESIZE_SVGA);
-
-}
-
-void loop(){
-  if (takeNewPhoto){
-    capturePhotoSaveSpiffs();
-    
-    while (!emailSent){
-      Serial.println("Sending the email...");
-      emailSent = sendEmail(WiFi_IP);
-    }
-    Serial.println("Email was sent successfully!");
-
-    emailSent = false;
-    takeNewPhoto = false;
-  }
-
-  if (WiFi.status() != WL_CONNECTED){
-    WiFi_IP = setupWiFi();
-  }
-
-  delay(500);
-
-}
-
-void setupAP(void){
-  Serial.println("Setting up AP...");
-
-  WiFi.softAP(ap_ssid, ap_password);
-  delay(100);
-
- // if (!WiFi.softAPConfig(AP_local_IP, AP_gateway, AP_subnet)) {
- //   Serial.println("AP configuration failed.");
- // }
-
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP setup with IP address: ");
-  Serial.println(IP);
 }
 
 String setupWiFi(void){
@@ -315,5 +309,75 @@ void smtpCallback(SMTP_Status status){
       ESP_MAIL_PRINTF("Subject: %s\n", result.subject);
     }
     Serial.println("----------------\n");
+  }
+}
+
+esp_err_t img_get_handler(httpd_req_t *req) {
+  const char resp[] = "Image request was sent to ESP32-CAM";
+  takeNewPhoto = true;
+  accessAnswer = -1;
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t access_get_handler(httpd_req_t *req) {
+  String accAns = String(accessAnswer);
+  const char* resp = accAns.c_str();
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t access_granted_get_handler(httpd_req_t *req) {
+  const char resp[] = "You have granted the access.";
+  accessAnswer = 1;
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t access_denied_get_handler(httpd_req_t *req) {
+  const char resp[] = "You have denied the access.";
+  accessAnswer = 0;
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+httpd_uri_t img_uri = {
+  .uri = "/img",
+  .method = HTTP_GET,
+  .handler = img_get_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t access_uri = {
+  .uri = "/access",
+  .method = HTTP_GET,
+  .handler = access_get_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t access_granted_uri = {
+  .uri = "/access_granted",
+  .method = HTTP_GET,
+  .handler = access_granted_get_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t access_denied_uri = {
+  .uri = "/access_denied",
+  .method = HTTP_GET,
+  .handler = access_denied_get_handler,
+  .user_ctx = NULL
+};
+
+void startServer(){
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.server_port = 80;
+  httpd_handle_t server = NULL;
+
+  if (httpd_start(&server, &config) == ESP_OK) {
+    httpd_register_uri_handler(server, &img_uri);
+    httpd_register_uri_handler(server, &access_uri);
+    httpd_register_uri_handler(server, &access_granted_uri);
+    httpd_register_uri_handler(server, &access_denied_uri);
   }
 }

@@ -24,8 +24,8 @@ const char* ssid_cam = "ESP32-cam";
 const char* password_cam =  "123456789";
 
 //HTTP request for the communication with the camera
-const char* serverTakePic = "http://192.168.4.1/img";
-const char* serverAccessQuest = "http://192.168.4.1/access";
+const char* serverTakePic = "http://192.168.1.120/img";
+const char* serverAccessQuest = "http://192.168.1.120/access";
 
 //Boolean variables to be used in the main loop
 boolean motionDetected = false;
