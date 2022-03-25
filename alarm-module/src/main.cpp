@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
-//#include <ESPAsyncWebServer.h>
 #include <esp_camera.h>
 #include <FS.h>
 #include <ESP_Mail_Client.h>
@@ -110,6 +109,7 @@ void loop(){
 
     emailSent = false;
     takeNewPhoto = false;
+
   }
 
   if (WiFi.status() != WL_CONNECTED){
@@ -315,7 +315,6 @@ void smtpCallback(SMTP_Status status){
 esp_err_t img_get_handler(httpd_req_t *req) {
   const char resp[] = "Image request was sent to ESP32-CAM";
   takeNewPhoto = true;
-  accessAnswer = -1;
   httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
@@ -324,6 +323,9 @@ esp_err_t access_get_handler(httpd_req_t *req) {
   String accAns = String(accessAnswer);
   const char* resp = accAns.c_str();
   httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  if (accessAnswer != -1) {
+    accessAnswer = -1;
+  }
   return ESP_OK;
 }
 

@@ -14,7 +14,11 @@
 #define TFT_CS 5
 
 #define PIR_PIN 26
+#define BUTTON_PIN 25
 #define FILE_PHOTO "/image.jpg"
+
+//This defines the maximum intercom waiting time
+#define maxIntercomTime 45000
 
 //This defines the time between two detections of motion that cause sending an email
 #define pirDelayTime 45000
@@ -30,14 +34,22 @@ const char* serverAccessQuest = "http://192.168.1.120/access";
 //Boolean variables to be used in the main loop
 boolean motionDetected = false;
 boolean imageObtainSuccess = false;
+boolean intercomCalled = false;
 
 //Int variable used for handling the response from the e-mail
 int accessAnswer = -1;
 
+//String variable ALARM/INTERCOM which changes the mode of operation of the system
+String mode = "INTERCOM";
+
 //Function handling for C++
 boolean requestCameraImage(void);
+
 void setupCameraWiFi(void);
 void setupRouterWiFi(void);
+void runAlarmMode(void);
+void runIntercomMode(void);
+
 int requestAccessAnswer(void);
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
@@ -45,6 +57,7 @@ SPIFFS_ImageReader reader;
 
 void setup() {
   pinMode(PIR_PIN, INPUT);
+  pinMode(BUTTON_PIN, INPUT);
 
   Serial.begin(9600);
 
@@ -61,25 +74,33 @@ void loop() {
     setupCameraWiFi();
   }
 
-  while (!motionDetected){
-    motionDetected = digitalRead(PIR_PIN);
+  if (mode == "ALARM") {
+    runAlarmMode();
+  } else if (mode == "INTERCOM") {
+    runIntercomMode();
+  }
+  
+}
+
+void runIntercomMode(void) {
+  while (!intercomCalled){
+    intercomCalled = !digitalRead(BUTTON_PIN);
     tft.fillScreen(ST77XX_BLACK);
-    delay(1500);
+    delay(500);
   }
 
-  Serial.println("Motion detected! Sending image request to ESP32-CAM");
+  //Here some kind of buzzer ring is needed
+  Serial.println("Somebody is ringing on the intercom!");
   int t0 = millis();
   reader.drawBMP("/acc_s.bmp", tft, 0, 0);
 
-  while (!imageObtainSuccess){
-    imageObtainSuccess = requestCameraImage();
-  }
-
-  delay (5000);
-
-  while (accessAnswer == -1){
+  while (accessAnswer == -1){ 
     delay(1000);
     accessAnswer = requestAccessAnswer(); //-1 means that the ESP32-CAM has not received an answer from the email receipent
+    int t = millis() - t0;
+    if (t >= maxIntercomTime && accessAnswer == -1) {
+      accessAnswer = 0;
+    }
   }
 
   if (accessAnswer == 0){
@@ -90,9 +111,27 @@ void loop() {
     delay(5000);
   }
 
+  accessAnswer = -1;
+  intercomCalled = false;
+
+}
+
+void runAlarmMode(void) {
+  while (!motionDetected){
+    motionDetected = digitalRead(PIR_PIN);
+    tft.fillScreen(ST77XX_BLACK);
+    delay(1500);
+  }
+
+  Serial.println("Motion detected! Sending image request to ESP32-CAM");
+  int t0 = millis();
+
+  while (!imageObtainSuccess){
+    imageObtainSuccess = requestCameraImage();
+  }
+
   imageObtainSuccess = false;
   motionDetected = false;
-  accessAnswer = -1;
 
   //This part handles the time - so that the image request is not sent more often than pirDelayTime
   int t = millis() - t0;
