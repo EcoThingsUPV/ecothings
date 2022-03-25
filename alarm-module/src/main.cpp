@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 #include <esp_camera.h>
 #include <FS.h>
+#include <ESP_Mail_Client.h>
 
 //image file name for SPIFFS
 #define FILE_PHOTO "/image.jpg"
@@ -27,16 +28,45 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
+//AP parameters
+const char* ap_ssid = "ESP32-cam";
+const char* ap_password =  "123456789";
+
+//WiFi parameters
+const char* ssid = "iPhone";
+const char* password = "123456789";
+
+//Static AP IP settings - ESP32-CAM will be accessible under this address for the devices in its network
+IPAddress AP_local_IP(192, 168, 1, 120);
+IPAddress AP_gateway(192, 168, 1, 1);
+IPAddress AP_subnet(255, 255, 0, 0);
+IPAddress AP_dns(8, 8, 8, 8);
+
+//Variables for email handling
+const char* smtp_host = "smtp.gmail.com";
+const int smtp_port = 465;
+const char* author_email = "ecothingsupv@gmail.com";
+const char* author_password = "fwlvzfcgyzzrleej";
+const char* recipient_email = "piotrek.laszkiewicz23@gmail.com";
+
+//Variables used in the main loop
 boolean takeNewPhoto = false;
-const char* ssid = "ESP32-cam";
-const char* password =  "123456789";
+boolean emailSent = false;
+String WiFi_IP;
 
 int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the access request
  
 AsyncWebServer server(80);
 
+//Function handling for C++
 bool checkPhoto( fs::FS &fs );
 void capturePhotoSaveSpiffs(void);
+void setupAP(void);
+void smtpCallback(SMTP_Status status);
+String setupWiFi(void);
+boolean sendEmail(String WiFi_IP);
+
+SMTPSession smtp;
 
 void setup(){
   pinMode(4, OUTPUT);
@@ -44,13 +74,9 @@ void setup(){
   Serial.begin(115200);
   Serial.println("Starting the program...");
 
-  Serial.println("Setting AP...");
-
-  WiFi.softAP(ssid, password);
-
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+  WiFi.mode(WIFI_AP_STA);
+  setupAP();
+  WiFi_IP = setupWiFi();
 
   if (!SPIFFS.begin()){
     Serial.println("SPIFFS failed to initialize!");
@@ -59,8 +85,7 @@ void setup(){
   server.on("/img", HTTP_GET, [](AsyncWebServerRequest *request){
     takeNewPhoto = true;
     accessAnswer = -1;
-    delay(1000);
-    request->send(SPIFFS, FILE_PHOTO, "image/jpeg");
+    request->send(200, "text/plain", "OK");
   });
 
   server.on("/access", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -125,9 +150,51 @@ void setup(){
 void loop(){
   if (takeNewPhoto){
     capturePhotoSaveSpiffs();
+    
+    while (!emailSent){
+      Serial.println("Sending the email...");
+      emailSent = sendEmail(WiFi_IP);
+    }
+    Serial.println("Email was sent successfully!");
+
+    emailSent = false;
     takeNewPhoto = false;
   }
-  delay(1);
+
+  if (WiFi.status() != WL_CONNECTED){
+    WiFi_IP = setupWiFi();
+  }
+
+  delay(500);
+
+}
+
+void setupAP(void){
+  Serial.println("Setting up AP...");
+
+  WiFi.softAP(ap_ssid, ap_password);
+  delay(100);
+
+ // if (!WiFi.softAPConfig(AP_local_IP, AP_gateway, AP_subnet)) {
+ //   Serial.println("AP configuration failed.");
+ // }
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP setup with IP address: ");
+  Serial.println(IP);
+}
+
+String setupWiFi(void){
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED){
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.print("Connected to your WiFi network with IP address: ");
+  Serial.println(WiFi.localIP());
+
+  return WiFi.localIP().toString();
 }
 
 bool checkPhoto( fs::FS &fs ) {
@@ -140,7 +207,7 @@ void capturePhotoSaveSpiffs(void){
   camera_fb_t *fb = NULL;
   bool ok = 0;
 
-  do{
+  do {
     Serial.println("Taking a photo...");
 
     digitalWrite(4, HIGH);
@@ -167,4 +234,86 @@ void capturePhotoSaveSpiffs(void){
     esp_camera_fb_return(fb);
     ok = checkPhoto(SPIFFS);
   } while(!ok);
+}
+
+boolean sendEmail(String WiFi_IP){
+
+  boolean status;
+  String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email. Please choose an action: <br> <a href=\"http://" + WiFi_IP + "/access_denied\">Deny access!</a> <br> <a href=\"http://" + WiFi_IP + "/access_granted\">Grant access!</a>";
+
+  smtp.debug(0);
+  //smtp.callback(smtpCallback); uncomment to see callbacks in serial monitor
+
+  //Email session configuration
+  ESP_Mail_Session session;
+
+  session.server.host_name = smtp_host;
+  session.server.port = smtp_port;
+  session.login.email = author_email;
+  session.login.password = author_password;
+  session.login.user_domain = "";
+
+  //Email content configuration
+  SMTP_Message message;
+
+  message.enable.chunking = true;
+  message.sender.name = "ESP32 alarm module";
+  message.sender.email = author_email;
+  message.subject = "ALARM! Movement was detected on the premises!";
+  message.addRecipient("House owner", recipient_email);
+
+  message.html.content = htmlMsg.c_str();
+  message.html.charSet = "utf-8";
+  message.html.transfer_encoding = Content_Transfer_Encoding::enc_qp;
+  
+  message.priority = esp_mail_smtp_priority::esp_mail_smtp_priority_normal;
+  message.response.notify = esp_mail_smtp_notify_success | esp_mail_smtp_notify_failure | esp_mail_smtp_notify_delay;
+
+  SMTP_Attachment att;
+
+  att.descr.filename = "image.jpg";
+  att.descr.mime = "image/jpeg";
+  att.file.path = FILE_PHOTO;
+  att.file.storage_type = esp_mail_file_storage_type_flash;
+  att.descr.transfer_encoding = Content_Transfer_Encoding::enc_base64;
+
+  message.addAttachment(att);
+
+  if (!smtp.connect(&session)){
+    status = true;
+  }
+
+  if (!MailClient.sendMail(&smtp, &message, true)){
+    Serial.println("Error sending Email, " + smtp.errorReason());
+    status = false;
+  }
+  return status;
+}
+
+void smtpCallback(SMTP_Status status){
+  /* Print the current status */
+  Serial.println(status.info());
+
+  /* Print the sending result */
+  if (status.success()){
+    Serial.println("----------------");
+    ESP_MAIL_PRINTF("Message sent success: %d\n", status.completedCount());
+    ESP_MAIL_PRINTF("Message sent failled: %d\n", status.failedCount());
+    Serial.println("----------------\n");
+    struct tm dt;
+
+    for (size_t i = 0; i < smtp.sendingResult.size(); i++){
+      /* Get the result item */
+      SMTP_Result result = smtp.sendingResult.getItem(i);
+      time_t ts = (time_t)result.timestamp;
+      localtime_r(&ts, &dt);
+
+      ESP_MAIL_PRINTF("Message No: %d\n", i + 1);
+      ESP_MAIL_PRINTF("Status: %s\n", result.completed ? "success" : "failed");
+      ESP_MAIL_PRINTF("Date/Time: %d/%d/%d %d:%d:%d\n", dt.tm_year + 1900, dt.tm_mon + 1, dt.tm_mday, dt.tm_hour, dt.tm_min, dt.tm_sec);
+      ESP_MAIL_PRINTF("Recipient: %s\n", result.recipients);
+      ESP_MAIL_PRINTF("Subject: %s\n", result.subject);
+    }
+    Serial.println("----------------\n");
+  }
 }
