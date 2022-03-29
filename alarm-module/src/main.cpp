@@ -1,3 +1,7 @@
+/***
+  The video streaming part 
+
+***/ 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
@@ -67,6 +71,7 @@ String setupWiFi(void);
 
 boolean sendEmail(String WiFi_IP);
 
+esp_err_t home_get_handler(httpd_req_t *req);
 esp_err_t img_get_handler(httpd_req_t *req);
 esp_err_t access_get_handler(httpd_req_t *req);
 esp_err_t access_granted_get_handler(httpd_req_t *req);
@@ -312,6 +317,15 @@ void smtpCallback(SMTP_Status status){
   }
 }
 
+esp_err_t home_get_handler(httpd_req_t *req) {
+  String response = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP-32 intercom system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center> <br><center><form action = \"http://" + WiFi_IP + "/access_granted\"><input type=\"submit\" value=\"Open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center> <br><center><form action = \"http://" + WiFi_IP + "/access_denied\"><input type=\"submit\" value=\"Don't open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+
+  const char* resp = response.c_str();
+
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
 esp_err_t img_get_handler(httpd_req_t *req) {
   const char resp[] = "Image request was sent to ESP32-CAM";
   takeNewPhoto = true;
@@ -342,6 +356,13 @@ esp_err_t access_denied_get_handler(httpd_req_t *req) {
   httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
+
+httpd_uri_t home_uri = {
+  .uri = "/",
+  .method = HTTP_GET,
+  .handler = home_get_handler,
+  .user_ctx = NULL
+};
 
 httpd_uri_t img_uri = {
   .uri = "/img",
@@ -381,5 +402,6 @@ void startServer(){
     httpd_register_uri_handler(server, &access_uri);
     httpd_register_uri_handler(server, &access_granted_uri);
     httpd_register_uri_handler(server, &access_denied_uri);
+    httpd_register_uri_handler(server, &home_uri);
   }
 }
