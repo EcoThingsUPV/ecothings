@@ -40,7 +40,6 @@ const char* password = "123456789";
 IPAddress AP_local_IP(192, 168, 1, 120);
 IPAddress AP_gateway(192, 168, 1, 1);
 IPAddress AP_subnet(255, 255, 0, 0);
-IPAddress AP_dns(8, 8, 8, 8);
 
 //Variables for email handling
 const char* smtp_host = "smtp.gmail.com";
@@ -180,6 +179,7 @@ void setupCamera(void){
 
 String setupWiFi(void){
   WiFi.begin(ssid, password);
+  WiFi.setSleep(false);
 
   while (WiFi.status() != WL_CONNECTED){
     delay(1000);
@@ -233,7 +233,7 @@ void capturePhotoSaveSpiffs(void){
 boolean sendEmail(String WiFi_IP){
 
   boolean status;
-  String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email. Please choose an action: <br> <a href=\"http://" + WiFi_IP + "/access_denied\">Deny access!</a> <br> <a href=\"http://" + WiFi_IP + "/access_granted\">Grant access!</a>";
+  String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email.";
 
   smtp.debug(0);
   //smtp.callback(smtpCallback); uncomment to see callbacks in serial monitor
