@@ -7,6 +7,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPIFFS_ImageReader.h>
+#include <esp_http_server.h>
 
 //Pinout definition for the TFT screen
 #define TFT_DC 2
@@ -27,6 +28,15 @@
 const char* ssid_cam = "ESP32-cam";
 const char* password_cam =  "123456789";
 
+//Variables for ESP32's AP - used to set alarm or intercom mode
+const char* ap_ssid = "ESP32 alarm/intercom";
+const char* ap_password = "123456789";
+
+//Static AP IP settings - ESP32 will be accessible under this address for the devices in its network
+IPAddress AP_local_IP(192, 168, 1, 120);
+IPAddress AP_gateway(192, 168, 1, 1);
+IPAddress AP_subnet(255, 255, 0, 0);
+
 //HTTP request for the communication with the camera
 const char* serverTakePic = "http://192.168.1.120/img";
 const char* serverAccessQuest = "http://192.168.1.120/access";
@@ -40,17 +50,22 @@ boolean intercomCalled = false;
 int accessAnswer = -1;
 
 //String variable ALARM/INTERCOM which changes the mode of operation of the system
-String mode = "INTERCOM";
+String mode = "";
 
 //Function handling for C++
 boolean requestCameraImage(void);
 
 void setupCameraWiFi(void);
-void setupRouterWiFi(void);
 void runAlarmMode(void);
 void runIntercomMode(void);
+void setupAP(void);
+void startServer();
 
 int requestAccessAnswer(void);
+
+esp_err_t home_get_handler(httpd_req_t *req);
+esp_err_t alarm_get_handler(httpd_req_t *req);
+esp_err_t intercom_get_handler(httpd_req_t *req);
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 SPIFFS_ImageReader reader;
@@ -65,7 +80,16 @@ void setup() {
 
   tft.initR(INITR_BLACKTAB);
 
+  setupAP();
+  startServer();
+
+  while (mode == "") {
+    delay(1000);
+  }
+
+  WiFi.softAPdisconnect(true);
   setupCameraWiFi();
+
 }
 
 void loop() {
@@ -174,7 +198,6 @@ int requestAccessAnswer(void){
       }
   } else {
     Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-    http.end();
     answer = -1;
   }
   http.end();
@@ -191,4 +214,72 @@ void setupCameraWiFi(void){
   }
   Serial.print("Connected to ESP32-CAM's WiFi network with IP address: ");
   Serial.println(WiFi.localIP());
+}
+
+void setupAP(void) {
+  WiFi.mode(WIFI_AP);
+  Serial.println("Setting up AP...");
+
+  WiFi.softAP(ap_ssid, ap_password);
+
+  if (!WiFi.softAPConfig(AP_local_IP, AP_gateway, AP_subnet)) {
+    Serial.println("AP configuration failed.");
+  }
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP setup with IP address: ");
+  Serial.println(IP);
+}
+
+esp_err_t home_get_handler(httpd_req_t *req) {
+  const char resp[] = "You logged in to the ESP-32 alarm/intercom system. Please select the right operation mode form below. <br> <a href=\"http://192.168.1.120/alarm\">Alarm mode</a> <br> <a href=\"http://192.168.1.120/intercom\">Intercom mode</a>";
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t alarm_get_handler(httpd_req_t *req) {
+  const char resp[] = "Alarm mode is on!";
+  mode = "ALARM";
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t intercom_get_handler(httpd_req_t *req) {
+  const char resp[] = "Intercom mode is on!";
+  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  mode = "INTERCOM";
+  return ESP_OK;
+}
+
+httpd_uri_t home_uri = {
+  .uri = "/",
+  .method = HTTP_GET,
+  .handler = home_get_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t alarm_uri = {
+  .uri = "/alarm",
+  .method = HTTP_GET,
+  .handler = alarm_get_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t intercom_uri = {
+  .uri = "/intercom",
+  .method = HTTP_GET,
+  .handler = intercom_get_handler,
+  .user_ctx = NULL
+};
+
+void startServer(){
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.server_port = 80;
+  httpd_handle_t server = NULL;
+
+  if (httpd_start(&server, &config) == ESP_OK) {
+    httpd_register_uri_handler(server, &home_uri);
+    httpd_register_uri_handler(server, &alarm_uri);
+    httpd_register_uri_handler(server, &intercom_uri);
+  }
 }
