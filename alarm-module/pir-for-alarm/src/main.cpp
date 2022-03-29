@@ -232,7 +232,8 @@ void setupAP(void) {
 }
 
 esp_err_t home_get_handler(httpd_req_t *req) {
-  const char resp[] = "You logged in to the ESP-32 alarm/intercom system. Please select the right operation mode form below. <br> <a href=\"http://192.168.1.120/alarm\">Alarm mode</a> <br> <a href=\"http://192.168.1.120/intercom\">Intercom mode</a>";
+  const char resp[] = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP-32 alarm/intercom system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right operation mode from below:</p></center> <br><center><form action = \"http://192.168.1.120/alarm\"><input type=\"submit\" value=\"Alarm mode\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center> <br><center><form action = \"http://192.168.1.120/intercom\"><input type=\"submit\" value=\"Intercom mode\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+
   httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
