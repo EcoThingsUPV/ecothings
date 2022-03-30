@@ -108,6 +108,10 @@ void loop() {
 
 void runIntercomMode(void) {
   while (!intercomCalled){
+    if (WiFi.status() != WL_CONNECTED){
+    setupCameraWiFi();
+    }
+
     intercomCalled = !digitalRead(BUTTON_PIN);
     tft.fillScreen(ST77XX_BLACK);
     delay(500);
@@ -119,6 +123,10 @@ void runIntercomMode(void) {
   reader.drawBMP("/acc_s.bmp", tft, 0, 0);
 
   while (accessAnswer == -1){ 
+    if (WiFi.status() != WL_CONNECTED){
+    setupCameraWiFi();
+    }
+
     delay(1000);
     accessAnswer = requestAccessAnswer(); //-1 means that the ESP32-CAM has not received an answer from the email receipent
     int t = millis() - t0;
@@ -142,6 +150,10 @@ void runIntercomMode(void) {
 
 void runAlarmMode(void) {
   while (!motionDetected){
+    if (WiFi.status() != WL_CONNECTED){
+    setupCameraWiFi();
+    }
+
     motionDetected = digitalRead(PIR_PIN);
     tft.fillScreen(ST77XX_BLACK);
     delay(1500);
@@ -151,6 +163,10 @@ void runAlarmMode(void) {
   int t0 = millis();
 
   while (!imageObtainSuccess){
+    if (WiFi.status() != WL_CONNECTED){
+    setupCameraWiFi();
+    }
+    
     imageObtainSuccess = requestCameraImage();
   }
 
