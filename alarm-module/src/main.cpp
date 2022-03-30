@@ -1,7 +1,14 @@
 /***
-  The video streaming part 
+  The video streaming part was inspired by:
 
-***/ 
+  Rui Santos
+  Complete project details at https://RandomNerdTutorials.com/esp32-cam-video-streaming-web-server-camera-home-assistant/
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this part of software and associated documentation files.
+
+  The above copyright notice and this permission notice shall be included in all copies or substantial portions of this part of the software.
+***/
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
@@ -12,6 +19,8 @@
 
 //image file name for SPIFFS
 #define FILE_PHOTO "/image.jpg"
+
+#define PART_BOUNDARY "123456789000000000000987654321"
 
 //definitions for ESP32-CAM
 #define PWDN_GPIO_NUM     32
@@ -31,6 +40,14 @@
 #define VSYNC_GPIO_NUM    25
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
+
+//Stream parameters
+static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
+static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
+static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+
+httpd_handle_t stream_httpd = NULL;
+
 
 //AP parameters
 const char* ap_ssid = "ESP32-cam";
@@ -76,6 +93,7 @@ esp_err_t img_get_handler(httpd_req_t *req);
 esp_err_t access_get_handler(httpd_req_t *req);
 esp_err_t access_granted_get_handler(httpd_req_t *req);
 esp_err_t access_denied_get_handler(httpd_req_t *req);
+esp_err_t stream_handler(httpd_req_t *req);
 
 SMTPSession smtp;
 
@@ -318,7 +336,7 @@ void smtpCallback(SMTP_Status status){
 }
 
 esp_err_t home_get_handler(httpd_req_t *req) {
-  String response = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP-32 intercom system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center> <br><center><form action = \"http://" + WiFi_IP + "/access_granted\"><input type=\"submit\" value=\"Open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center> <br><center><form action = \"http://" + WiFi_IP + "/access_denied\"><input type=\"submit\" value=\"Don't open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  String response = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP-32 intercom system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center> <br><center><form action = \"http://" + WiFi_IP + "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center><br><center><form action = \"http://" + WiFi_IP + "/access_granted\"><input type=\"submit\" value=\"Open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center> <br><center><form action = \"http://" + WiFi_IP + "/access_denied\"><input type=\"submit\" value=\"Don't open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
 
   const char* resp = response.c_str();
 
@@ -357,6 +375,65 @@ esp_err_t access_denied_get_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+esp_err_t stream_handler(httpd_req_t *req){
+  camera_fb_t * fb = NULL;
+  esp_err_t res = ESP_OK;
+  size_t _jpg_buf_len = 0;
+  uint8_t * _jpg_buf = NULL;
+  char * part_buf[64];
+
+  res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+  if(res != ESP_OK){
+    return res;
+  }
+
+  while(true){
+    fb = esp_camera_fb_get();
+    if (!fb) {
+      Serial.println("Camera capture failed");
+      res = ESP_FAIL;
+    } else {
+      if(fb->width > 400){
+        if(fb->format != PIXFORMAT_JPEG){
+          bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+          esp_camera_fb_return(fb);
+          fb = NULL;
+          if(!jpeg_converted){
+            Serial.println("JPEG compression failed");
+            res = ESP_FAIL;
+          }
+        } else {
+          _jpg_buf_len = fb->len;
+          _jpg_buf = fb->buf;
+        }
+      }
+    }
+    if(res == ESP_OK){
+      size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
+      res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+    }
+    if(res == ESP_OK){
+      res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+    }
+    if(res == ESP_OK){
+      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+    }
+    if(fb){
+      esp_camera_fb_return(fb);
+      fb = NULL;
+      _jpg_buf = NULL;
+    } else if(_jpg_buf){
+      free(_jpg_buf);
+      _jpg_buf = NULL;
+    }
+    if(res != ESP_OK){
+      break;
+    }
+    //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
+  }
+  return res;
+}
+
 httpd_uri_t home_uri = {
   .uri = "/",
   .method = HTTP_GET,
@@ -392,6 +469,13 @@ httpd_uri_t access_denied_uri = {
   .user_ctx = NULL
 };
 
+httpd_uri_t stream_uri = {
+  .uri = "/stream",
+  .method = HTTP_GET,
+  .handler = stream_handler,
+  .user_ctx = NULL
+};
+
 void startServer(){
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
@@ -403,5 +487,6 @@ void startServer(){
     httpd_register_uri_handler(server, &access_granted_uri);
     httpd_register_uri_handler(server, &access_denied_uri);
     httpd_register_uri_handler(server, &home_uri);
+    httpd_register_uri_handler(server, &stream_uri);
   }
 }
