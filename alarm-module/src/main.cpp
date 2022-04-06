@@ -19,6 +19,8 @@
 #include <esp_http_server.h>
 #include <EEPROM.h>
 #include <SD_MMC.h>
+#include <time.h>
+#include <string>
 
 //image file name for SPIFFS
 #define FILE_PHOTO "/image.jpg"
@@ -194,6 +196,12 @@ enum relative                              // Used when setting position within 
   FROM_END
 };
 
+//Variables for setting time. By default set to UTC +2.00.
+const int UTC = 2;
+const long gmtOffset_sec = UTC*60*60;
+const int daylightOffset_sec = 3600;       //Takes into account the daylight saving time
+const char* ntpServer = "pool.ntp.org";
+
 //Function handling for C++
 bool checkPhoto( fs::FS &fs );
 void capturePhotoSaveSpiffs(void);
@@ -209,6 +217,7 @@ void closeFile();
 void writeIdx1Chunk();
 
 String setupWiFi(void);
+String getTimeStamp(void);
 
 boolean sendEmail(String WiFi_IP);
 boolean startFile();
@@ -236,6 +245,9 @@ void setup(){
   WiFi.mode(WIFI_AP_STA);
   setupAP();
   WiFi_IP = setupWiFi();
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println(getTimeStamp());
 
   if (!SPIFFS.begin()){
     Serial.println("SPIFFS failed to initialize!");
@@ -494,7 +506,8 @@ void captureFrame() {
 }
 
 boolean startFile() {
-  char AVIFilename[35] = "/sdcard/event_recording.avi";
+  String AVIFilename_str = "/sdcard/" + getTimeStamp() + ".avi";
+  const char* AVIFilename = AVIFilename_str.c_str();
 
   // Reset file statistics.
   fileFramesCaptured  = 0;        
@@ -855,6 +868,21 @@ boolean sendEmail(String WiFi_IP){
     status = false;
   }
   return resp.status;
+}
+
+String getTimeStamp(void) {
+  struct tm timeinfo;
+
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to get time");
+    return "";
+  }
+
+  Serial.println(timeinfo.tm_year);
+
+  String timestamp = String(1900 + timeinfo.tm_year) + String(1+ timeinfo.tm_mon) + String(timeinfo.tm_mday) + "_" + String(timeinfo.tm_hour) + String(timeinfo.tm_min) + String(timeinfo.tm_sec);
+
+  return timestamp;
 }
 
 esp_err_t home_get_handler(httpd_req_t *req) {
