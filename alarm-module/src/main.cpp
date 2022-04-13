@@ -20,8 +20,12 @@
 #include <EEPROM.h>
 #include <SD_MMC.h>
 #include <time.h>
+#include <esp_vfs.h>
 
 #define PART_BOUNDARY "123456789000000000000987654321"
+
+#define SCRATCH_BUFSIZE 8192
+
 
 //definitions for ESP32-CAM
 #define PWDN_GPIO_NUM     32
@@ -42,13 +46,22 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
+//Structure for scratch buffer
+struct file_server_data {
+    /* Base path of file storage */
+    char base_path[ESP_VFS_PATH_MAX + 1];
+
+    /* Scratch buffer for temporary storage during file transfer */
+    char scratch[SCRATCH_BUFSIZE];
+};
+
 //Stream parameters
 static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
+//variable for HTTPD server
 httpd_handle_t stream_httpd = NULL;
-
 
 //AP parameters
 const char* ap_ssid = "ESP32-cam";
@@ -981,7 +994,13 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     resp = WiFi_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = "/access\"><img src = \"data:image/jpeg;base64,";
+    resp = "/video_download?filename=";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = videoName;
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    
+    resp = "\"><img src = \"data:image/jpeg;base64,";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     httpd_resp_send_chunk(req, video_miniature, HTTPD_RESP_USE_STRLEN);
@@ -1105,6 +1124,52 @@ esp_err_t stream_handler(httpd_req_t *req){
   return res;
 }
 
+esp_err_t get_video_handler(httpd_req_t *req) {
+  char filePath[35];
+  const char* rootPath = "/sdcard/videos/";
+  char fileName[20];
+  char query[httpd_req_get_url_query_len(req) + 1];
+  
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "filename", fileName, 20);
+
+  strcpy(filePath, rootPath);
+  strcat(filePath, fileName);
+
+  FILE* fd = fopen(filePath, "r");
+  Serial.println("Sending the file...");
+
+  httpd_resp_set_type(req, "video/x-msvideo");
+
+  char *chunk = ((struct file_server_data *)req->user_ctx)->scratch;
+  size_t chunksize;
+
+  do {
+    chunksize = fread(chunk, 1, SCRATCH_BUFSIZE, fd);
+
+    if (chunksize > 0) {
+      if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+        fclose(fd);
+        Serial.println("File sending failed!");
+        /* Abort sending file */
+        httpd_resp_sendstr_chunk(req, NULL);
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+        return ESP_FAIL;
+      }
+    }
+  } while (chunksize != 0);
+
+  fclose(fd);
+  Serial.println("File sending complete!");
+
+  #ifdef CONFIG_EXAMPLE_HTTPD_CONN_CLOSE_HEADER
+    httpd_resp_set_hdr(req, "Connection", "close");
+  #endif
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
 httpd_uri_t home_uri = {
   .uri = "/",
   .method = HTTP_GET,
@@ -1169,11 +1234,30 @@ httpd_uri_t stream_uri = {
 };
 
 void startServer(){
+  static struct file_server_data *server_data = NULL;
+
+  if (server_data) {
+      ESP_LOGE(TAG, "File server already started");
+  }
+
+  /* Allocate memory for server data */
+  server_data = (file_server_data*)calloc(1, sizeof(struct file_server_data));
+  if (!server_data) {
+      ESP_LOGE(TAG, "Failed to allocate memory for server data");
+  }
+
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   config.stack_size = 30000;
   config.max_uri_handlers = 10;
   httpd_handle_t server = NULL;
+
+  httpd_uri_t get_video_uri = {
+  .uri = "/video_download",
+  .method = HTTP_GET,
+  .handler = get_video_handler,
+  .user_ctx = server_data
+};
 
   if (httpd_start(&server, &config) == ESP_OK) {
     httpd_register_uri_handler(server, &img_uri);
@@ -1185,5 +1269,6 @@ void startServer(){
     httpd_register_uri_handler(server, &stream_uri);
     httpd_register_uri_handler(server, &alarm_uri);
     httpd_register_uri_handler(server, &motion_uri);
+    httpd_register_uri_handler(server, &get_video_uri);
   }
 }
