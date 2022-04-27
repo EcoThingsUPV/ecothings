@@ -24,11 +24,13 @@
 #include <SD_MMC.h>
 #include <time.h>
 #include <esp_vfs.h>
+#include <ArduinoSort.h>
 
 #define PART_BOUNDARY "123456789000000000000987654321"
 
 #define SCRATCH_BUFSIZE 8192
 
+#define PIR_PIN 0
 
 //definitions for ESP32-CAM
 #define PWDN_GPIO_NUM     32
@@ -218,6 +220,9 @@ const long gmtOffset_sec = UTC*60*60;
 const int daylightOffset_sec = 3600;       //Takes into account the daylight saving time
 const char* ntpServer = "pool.ntp.org";
 
+//This defines the time between two detections of motion that cause sending an email
+#define pirDelayTime 45000
+
 //Function handling for C++
 bool checkPhoto(const char* fileName);
 void capturePhotoSaveSD(String photoFileName);
@@ -258,6 +263,7 @@ EMailSender emailSend(author_email, author_password);
 
 void setup(){
   pinMode(4, OUTPUT);
+  pinMode(PIR_PIN, INPUT);
 
   Serial.begin(115200);
   Serial.println("Starting the program...");
@@ -304,6 +310,7 @@ void loop(){
   if (alarmOn) {
     recordVideo();
   }
+  alarmOn = false;
 
   delay(500);
 
@@ -388,6 +395,7 @@ void initialiseSDCard()
   sdmmc_host_t host = SDMMC_HOST_DEFAULT();
   
   sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+  slot_config.width = 1;
   
   esp_vfs_fat_sdmmc_mount_config_t mount_config = 
   {
@@ -458,6 +466,7 @@ void recordVideo() {
   cyclicalFramesCaptured = 0;
 
   int lastPicTaken = millis();
+  //int lastPirMeasurement = millis();
   int currentMillis;
   while (!motionDetected || cyclicalFramesCaptured < MAX_FRAMES) {
     currentMillis = millis();
@@ -466,13 +475,19 @@ void recordVideo() {
       lastPicTaken = millis();
       runBufferRepeat();
     }
+
+    /***if (!motionDetected && currentMillis - lastPirMeasurement > 1500) {
+      lastPirMeasurement = millis();
+      motionDetected = digitalRead(PIR_PIN);
+      Serial.println(motionDetected);
+    }***/
   }
 
   initInPos = cyclicalFramesCaptured % MAX_FRAMES;
   initOutPos = (cyclicalFramesCaptured + 1) % MAX_FRAMES;
 
   int t0 = millis();
-  fileOpen = startFile(); //Implement this function
+  fileOpen = startFile();
   Serial.println("Starting the file...");
 
   currentMillis = millis();
@@ -482,15 +497,15 @@ void recordVideo() {
     if (currentMillis - lastPicTaken > FRAME_INTERVAL) {
       lastPicTaken = millis();
       captureFrame();
-      addToFile(); //Implement
+      addToFile();
     }
   }
 
-  while (framesInBuffer() > 0) { //Implement
+  while (framesInBuffer() > 0) {
     addToFile();
   }
 
-  closeFile(); //Implement
+  closeFile();
   motionDetected = false;
   alarmOn = false;
 }
@@ -896,6 +911,7 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels, char* filenames[]
     }
     file = root.openNextFile();
   }
+  sortArrayReverse(filenames, nFiles);
 }
 
 int countFiles(fs::FS &fs, const char * dirname, uint8_t levels){
@@ -970,11 +986,49 @@ String getTimeStamp(void) {
 }
 
 esp_err_t home_get_handler(httpd_req_t *req) {
-  String response = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP-32 intercom system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center> <br><center><form action = \"http://" + WiFi_IP + "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center><br><center><form action = \"http://" + WiFi_IP + "/access_granted\"><input type=\"submit\" value=\"Open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center> <br><center><form action = \"http://" + WiFi_IP + "/access_denied\"><input type=\"submit\" value=\"Don't open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_set_type(req, "text/html");
 
-  const char* resp = response.c_str();
+  const char* resp = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP32 camera system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/alarm\"><input type=\"submit\" value=\"Turn the alarm mode on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/video\"><input type=\"submit\" value=\"Video gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/img\"><input type=\"submit\" value=\"Take an image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, NULL, 0);
+
   return ESP_OK;
 }
 
@@ -984,7 +1038,7 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
   char* fileNames [nFiles];
   listDir(SD_MMC, "/videos", 0, fileNames, nFiles);
 
-  const char* resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam video gallery.</b></p></center>";
+  const char* resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam video gallery</b></p></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   for (char* fileName : fileNames) {
@@ -1208,8 +1262,6 @@ esp_err_t delete_video_handler(httpd_req_t *req) {
   const char* rootPath = "/sdcard/videos/";
   char fileName[20];
   char query[httpd_req_get_url_query_len(req) + 1];
-
-  const char* resp;
   
   httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
   httpd_query_key_value(query, "filename", fileName, 20);
