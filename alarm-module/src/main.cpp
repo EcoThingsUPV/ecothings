@@ -100,8 +100,10 @@ int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the
 //Variables used by the video recording part
 const uint16_t      AVI_HEADER_SIZE = 252;   // Size of the AVI file header.
 const long unsigned FRAME_INTERVAL  = 250;   // Time (ms) between frame captures 
-const uint8_t       MAX_FRAMES      = 15;    // Maximum number of frames we hold at any time
-const int RECORDING_TIME = 5000;            // Time for which the video will keep recording after motion detection signal was received
+const uint8_t       INIT_FRAMES     = 15;    // Number of frames that will be recorded before motion detection
+const int           RECORDING_TIME  = 5000;  // Time for which the video will keep recording after motion detection signal was received
+char* BUFFER_REPEAT_FILES[INIT_FRAMES];      // Array used for storing filenames of images used in buffer repeat
+char* REMAINING_BUFFER_FILES[int(RECORDING_TIME/FRAME_INTERVAL)];              // Array used for storing filenames of all of the frames
 
 const byte buffer00dc   [4]  = {0x30, 0x30, 0x64, 0x63}; // "00dc"
 const byte buffer0000   [4]  = {0x00, 0x00, 0x00, 0x00}; // 0x00000000
@@ -185,11 +187,8 @@ const byte aviHeader[AVI_HEADER_SIZE] =      // This is the AVI file header.  So
   0x6D, 0x6F, 0x76, 0x69  // 0xF8 "movi"
 };
 
-camera_fb_t *frameBuffer[MAX_FRAMES];
-uint8_t  frameInPos  = 0;                  // Position within buffer where we write to.
-uint8_t  frameOutPos = 0;                  // Position within buffer where we read from.
-int initOutPos;                            // Initial read position
-int initInPos;                             // Initial write position
+camera_fb_t *frameBuffer;
+uint8_t  frameInPos  = 0;                  // Position within BUFFER_REPEAT_FILES where we write to a new filename.
 
 int cyclicalFramesCaptured = 0;            // Number of frames that were captured by runBufferRepeat()
 uint16_t fileFramesCaptured  = 0;          // Number of frames captured by camera.
@@ -225,7 +224,7 @@ const char* ntpServer = "pool.ntp.org";
 
 //Function handling for C++
 bool checkPhoto(const char* fileName);
-void capturePhotoSaveSD(String photoFileName);
+void capturePhotoSaveSD(String photoFileName, String savePath);
 void setupAP(void);
 void startServer();
 void setupCamera(void);
@@ -233,7 +232,7 @@ void initialiseSDCard();
 void recordVideo();
 void runBufferRepeat();
 void captureFrame();
-void addToFile();
+void addToFile(char* frameName);
 void closeFile();
 void writeIdx1Chunk();
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels, char* filenames[], int nFiles);
@@ -287,7 +286,7 @@ void setup(){
 
 void loop(){
   if (takeNewPhoto){
-  capturePhotoSaveSD(getTimeStamp());
+  capturePhotoSaveSD(getTimeStamp(), "/sdcard/images/");
 
     while (!emailSent){
       if (WiFi.status() != WL_CONNECTED){
@@ -355,7 +354,7 @@ void setupCamera(void){
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_SVGA;
   config.jpeg_quality = 25;
-  config.fb_count = MAX_FRAMES;
+  config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -395,12 +394,12 @@ void initialiseSDCard()
   sdmmc_host_t host = SDMMC_HOST_DEFAULT();
   
   sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-  slot_config.width = 1;
+  //slot_config.width = 1;
   
   esp_vfs_fat_sdmmc_mount_config_t mount_config = 
   {
     .format_if_mount_failed = false,
-    .max_files = 2,
+    .max_files = 3,
   };
   
   sdmmc_card_t *card;
@@ -426,24 +425,21 @@ bool checkPhoto(const char* fileName) {
   return ( pic_sz > 100 );
 }
 
-void capturePhotoSaveSD(String photoFileName){
+void capturePhotoSaveSD(String photoFileName, String savePath){
   camera_fb_t *fb = NULL;
   bool ok = 0;
 
   do {
     Serial.println("Taking a photo...");
 
-    digitalWrite(4, HIGH);
-    delay(100);
     fb = esp_camera_fb_get();
-    delay(100);
-    digitalWrite(4, LOW);
+
     if (!fb){
       Serial.println("Camera capture failed!");
       return;
     }
 
-    String filePhoto_str = String("/sdcard/images/" + photoFileName + ".jpg");
+    String filePhoto_str = String(savePath + photoFileName + ".jpg");
     const char* filePhoto = filePhoto_str.c_str();
 
     FILE *photoFile = fopen(filePhoto, "w");
@@ -468,7 +464,7 @@ void recordVideo() {
   int lastPicTaken = millis();
   //int lastPirMeasurement = millis();
   int currentMillis;
-  while (!motionDetected || cyclicalFramesCaptured < MAX_FRAMES) {
+  while (!motionDetected || cyclicalFramesCaptured < INIT_FRAMES) {
     currentMillis = millis();
 
     if (currentMillis - lastPicTaken > FRAME_INTERVAL) {
@@ -483,12 +479,9 @@ void recordVideo() {
     }***/
   }
 
-  initInPos = cyclicalFramesCaptured % MAX_FRAMES;
-  initOutPos = (cyclicalFramesCaptured + 1) % MAX_FRAMES;
-
   int t0 = millis();
-  fileOpen = startFile();
-  Serial.println("Starting the file...");
+  //fileOpen = startFile();
+  //Serial.println("Starting the file...");
 
   currentMillis = millis();
   while (fileOpen && currentMillis - t0 < RECORDING_TIME) {
@@ -497,49 +490,48 @@ void recordVideo() {
     if (currentMillis - lastPicTaken > FRAME_INTERVAL) {
       lastPicTaken = millis();
       captureFrame();
-      addToFile();
     }
   }
 
-  while (framesInBuffer() > 0) {
-    addToFile();
+  for (char* fileName : BUFFER_REPEAT_FILES) {
+    //addToFile(fileName);
   }
 
-  closeFile();
+  for (int i = 0; i < fileFramesCaptured; i++) {
+    //addToFile(REMAINING_BUFFER_FILES[i]);
+  }
+
+  //closeFile();
   motionDetected = false;
   alarmOn = false;
 }
 
 void runBufferRepeat() {
-  frameInPos = cyclicalFramesCaptured % MAX_FRAMES;
+  frameInPos = cyclicalFramesCaptured % INIT_FRAMES;
   
-  if (frameBuffer[frameInPos] != NULL) {
-    esp_camera_fb_return(frameBuffer[frameInPos]);
+  String filePhoto_str = String("/sdcard/temp/" + String(cyclicalFramesCaptured) + ".jpg");
+  const char* filePhoto = filePhoto_str.c_str();
+  
+  capturePhotoSaveSD(String(cyclicalFramesCaptured), "/sdcard/temp/");
+
+  if (cyclicalFramesCaptured + 1 > INIT_FRAMES) {
+    unlink(BUFFER_REPEAT_FILES[frameInPos]);
   }
 
-  frameBuffer[frameInPos] = esp_camera_fb_get();
-  if (frameBuffer[frameInPos]->buf == NULL)
-  {
-    Serial.print("Frame capture failed.");
-    return;    
-  }
+  BUFFER_REPEAT_FILES[frameInPos] = strdup(filePhoto);
 
   cyclicalFramesCaptured++; 
 }
 
 void captureFrame() {
-  frameInPos = (initInPos + fileFramesCaptured) % MAX_FRAMES;
+  frameInPos = fileFramesCaptured;
 
-  if (frameBuffer[frameInPos] != NULL) {
-    esp_camera_fb_return(frameBuffer[frameInPos]);
-  }
+  String filePhoto_str = String("/sdcard/temp/" + String(cyclicalFramesCaptured + fileFramesCaptured) + ".jpg");
+  const char* filePhoto = filePhoto_str.c_str();
 
-  frameBuffer[frameInPos] = esp_camera_fb_get();
-  if (frameBuffer[frameInPos]->buf == NULL)
-  {
-    Serial.print("Frame capture failed.");
-    return;    
-  }
+  capturePhotoSaveSD(String(cyclicalFramesCaptured + fileFramesCaptured), "/sdcard/temp/");
+
+  REMAINING_BUFFER_FILES[frameInPos] = strdup(filePhoto);
 
   fileFramesCaptured++;
 }
@@ -555,7 +547,7 @@ boolean startFile() {
   fileFramesTotalSize = 0;  
   fileFramesWritten   = 0; 
   filePadding         = 0;
-  fileStartTime       = millis() - (MAX_FRAMES * FRAME_INTERVAL);
+  fileStartTime       = millis() - (INIT_FRAMES * FRAME_INTERVAL);
 
 
   // Open the AVI file.
@@ -592,7 +584,7 @@ boolean startFile() {
   return true;
 }
 
-void addToFile() {
+void addToFile(char* frameName) {
   // For each frame we write a chunk to the AVI file made up of:
   //  "00dc" - chunk header.  Stream ID (00) & type (dc = compressed video)
   //  The size of the chunk (frame size + padding)
@@ -604,15 +596,22 @@ void addToFile() {
   // We also write to the temporary idx file.  This keeps track of the offset & size of each frame.
   // This is read back later (before we close the AVI file) to update the idx1 chunk.
   
+  FILE *frameFile = fopen(frameName, "w");
+
+  fseek(frameFile, 0L, SEEK_END);
+  uint32_t rawFrameSize = ftell(frameFile);
+  rewind(frameFile);
+
+  char* frame = (char*) malloc (sizeof(char)*rawFrameSize);
+  fread (frame, 1, rawFrameSize, frameFile);
+
+  fclose(frameFile);
+  //unlink(frameName);
+
   size_t bytesWritten;
-  
-
-  // Determine the position to read from in the buffer.
-  frameOutPos = (fileFramesWritten + initOutPos) % MAX_FRAMES;
-
 
   // Calculate if a padding byte is required (frame chunks need to be an even number of bytes).
-  uint8_t paddingByte = frameBuffer[frameOutPos]->len & 0x00000001;
+  uint8_t paddingByte = rawFrameSize & 0x00000001;
   
 
   // Keep track of the current position in the file relative to the start of the movi section.  This is used to update the idx1 file.
@@ -629,8 +628,8 @@ void addToFile() {
 
 
   // Add the frame size to the file (including padding).
-  uint32_t frameSize = frameBuffer[frameOutPos]->len + paddingByte;
-  fileFramesTotalSize += frameBuffer[frameOutPos]->len;
+  uint32_t frameSize = rawFrameSize + paddingByte;
+  fileFramesTotalSize += rawFrameSize;
 
   bytesWritten = writeLittleEndian(frameSize, aviFile, 0x00, FROM_CURRENT);
   if (bytesWritten != 4)
@@ -641,16 +640,12 @@ void addToFile() {
   
 
   // Write the frame from the camera.
-  bytesWritten = fwrite(frameBuffer[frameOutPos]->buf, 1, frameBuffer[frameOutPos]->len, aviFile);
-  if (bytesWritten != frameBuffer[frameOutPos]->len)
+  bytesWritten = fwrite(frame, 1, rawFrameSize, aviFile);
+  if (bytesWritten != rawFrameSize)
   {
     Serial.println("Unable to write frame to AVI file");
     return;
   }
-
-    
-  // Release this frame from memory.
-  esp_camera_fb_return(frameBuffer[frameOutPos]);   
 
 
   // The frame from the camera contains a chunk header of JFIF (bytes 7-10) that we want to replace with AVI1.
@@ -711,14 +706,8 @@ void closeFile() {
   fileOpen = false;
 
   // Calculate how long the AVI file runs for.
-  unsigned long fileDuration = (MAX_FRAMES * FRAME_INTERVAL + RECORDING_TIME) / 1000UL;
+  unsigned long fileDuration = (INIT_FRAMES * FRAME_INTERVAL + RECORDING_TIME) / 1000UL;
   Serial.println(fileDuration);
-
-  // Flush any remaining frames from the buffer.  
-  while(framesInBuffer() > 0)
-  {
-    addToFile();
-  }
  
   // Update AVI header with total file size. This is the sum of:
   //   AVI header (252 bytes less the first 8 bytes)
@@ -877,7 +866,7 @@ uint8_t writeLittleEndian(uint32_t value, FILE *file, int32_t offset, relative p
 }
 
 uint8_t framesInBuffer() {
-  return fileFramesCaptured + MAX_FRAMES - 1 - fileFramesWritten;
+  return fileFramesCaptured + INIT_FRAMES - 1 - fileFramesWritten;
 }
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels, char* filenames[], int nFiles){
