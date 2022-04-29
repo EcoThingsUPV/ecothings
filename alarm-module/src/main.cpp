@@ -99,11 +99,11 @@ int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the
 
 //Variables used by the video recording part
 const uint16_t      AVI_HEADER_SIZE = 252;   // Size of the AVI file header.
-const long unsigned FRAME_INTERVAL  = 250;   // Time (ms) between frame captures 
-const uint8_t       INIT_FRAMES     = 15;    // Number of frames that will be recorded before motion detection
+const long unsigned FRAME_INTERVAL  = 100;   // Time (ms) between frame captures 
+const uint8_t       INIT_FRAMES     = 50;    // Number of frames that will be recorded before motion detection
 const int           RECORDING_TIME  = 5000;  // Time for which the video will keep recording after motion detection signal was received
 char* BUFFER_REPEAT_FILES[INIT_FRAMES];      // Array used for storing filenames of images used in buffer repeat
-char* REMAINING_BUFFER_FILES[int(RECORDING_TIME/FRAME_INTERVAL)];              // Array used for storing filenames of all of the frames
+char* REMAINING_BUFFER_FILES[int(RECORDING_TIME/FRAME_INTERVAL)]; // Array used for storing filenames of all of the frames
 
 const byte buffer00dc   [4]  = {0x30, 0x30, 0x64, 0x63}; // "00dc"
 const byte buffer0000   [4]  = {0x00, 0x00, 0x00, 0x00}; // 0x00000000
@@ -122,7 +122,7 @@ const byte aviHeader[AVI_HEADER_SIZE] =      // This is the AVI file header.  So
 
   0x61, 0x76, 0x69, 0x68,  // 0x08 "avih"    fcc
   0x38, 0x00, 0x00, 0x00,  // 0x0C 56        Structure length
-  0x90, 0xD0, 0x03, 0x00,  // 0x20 250000    dwMicroSecPerFrame     [based on FRAME_INTERVAL] 
+  0x00, 0x00, 0x00, 0x00,  // 0x20           dwMicroSecPerFrame     [based on FRAME_INTERVAL] 
   0x00, 0x00, 0x00, 0x00,  // 0x24           dwMaxBytesPerSec       [gets updated later] 
   0x00, 0x00, 0x00, 0x00,  // 0x28 0         dwPaddingGranularity
   0x10, 0x00, 0x00, 0x00,  // 0x2C 0x10      dwFlags - AVIF_HASINDEX set.
@@ -150,7 +150,7 @@ const byte aviHeader[AVI_HEADER_SIZE] =      // This is the AVI file header.  So
   0x00, 0x00,              // 0x7A           wLanguage - not set
   0x00, 0x00, 0x00, 0x00,  // 0x7C           dwInitialFrames
   0x01, 0x00, 0x00, 0x00,  // 0x80 1         dwScale
-  0x04, 0x00, 0x00, 0x00,  // 0x84 4         dwRate (frames per second)         [based on FRAME_INTERVAL]         
+  0x00, 0x00, 0x00, 0x00,  // 0x84           dwRate (frames per second)         [based on FRAME_INTERVAL]         
   0x00, 0x00, 0x00, 0x00,  // 0x88           dwStart               
   0x00, 0x00, 0x00, 0x00,  // 0x8C           dwLength (frame count)             [gets updated later]
   0x00, 0x00, 0x00, 0x00,  // 0x90           dwSuggestedBufferSize
@@ -187,7 +187,6 @@ const byte aviHeader[AVI_HEADER_SIZE] =      // This is the AVI file header.  So
   0x6D, 0x6F, 0x76, 0x69  // 0xF8 "movi"
 };
 
-camera_fb_t *frameBuffer;
 uint8_t  frameInPos  = 0;                  // Position within BUFFER_REPEAT_FILES where we write to a new filename.
 
 int cyclicalFramesCaptured = 0;            // Number of frames that were captured by runBufferRepeat()
@@ -261,8 +260,7 @@ esp_err_t motion_get_handler(httpd_req_t *req);
 EMailSender emailSend(author_email, author_password);
 
 void setup(){
-  pinMode(4, OUTPUT);
-  pinMode(PIR_PIN, INPUT);
+  //pinMode(PIR_PIN, INPUT);
 
   Serial.begin(115200);
   Serial.println("Starting the program...");
@@ -353,7 +351,7 @@ void setupCamera(void){
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_SVGA;
-  config.jpeg_quality = 25;
+  config.jpeg_quality = 15;
   config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
@@ -480,8 +478,8 @@ void recordVideo() {
   }
 
   int t0 = millis();
-  //fileOpen = startFile();
-  //Serial.println("Starting the file...");
+  fileOpen = startFile();
+  Serial.println("Starting the file...");
 
   currentMillis = millis();
   while (fileOpen && currentMillis - t0 < RECORDING_TIME) {
@@ -493,32 +491,40 @@ void recordVideo() {
     }
   }
 
+  sortArray(BUFFER_REPEAT_FILES, INIT_FRAMES);
+
   for (char* fileName : BUFFER_REPEAT_FILES) {
-    //addToFile(fileName);
+    addToFile(fileName);
   }
 
   for (int i = 0; i < fileFramesCaptured; i++) {
-    //addToFile(REMAINING_BUFFER_FILES[i]);
+    addToFile(REMAINING_BUFFER_FILES[i]);
   }
 
-  //closeFile();
+  closeFile();
   motionDetected = false;
   alarmOn = false;
 }
 
 void runBufferRepeat() {
   frameInPos = cyclicalFramesCaptured % INIT_FRAMES;
+
+  char formattedFrameNumber[6];
+  sprintf(formattedFrameNumber, "%06d", cyclicalFramesCaptured);
+
+  char savePath[24];
+
+  strcpy(savePath, "/sdcard/temp/");
+  strcat(savePath, formattedFrameNumber);
+  strcat(savePath, ".jpg");
   
-  String filePhoto_str = String("/sdcard/temp/" + String(cyclicalFramesCaptured) + ".jpg");
-  const char* filePhoto = filePhoto_str.c_str();
-  
-  capturePhotoSaveSD(String(cyclicalFramesCaptured), "/sdcard/temp/");
+  capturePhotoSaveSD(String(formattedFrameNumber), "/sdcard/temp/");
 
   if (cyclicalFramesCaptured + 1 > INIT_FRAMES) {
     unlink(BUFFER_REPEAT_FILES[frameInPos]);
   }
 
-  BUFFER_REPEAT_FILES[frameInPos] = strdup(filePhoto);
+  BUFFER_REPEAT_FILES[frameInPos] = strdup(savePath);
 
   cyclicalFramesCaptured++; 
 }
@@ -526,12 +532,18 @@ void runBufferRepeat() {
 void captureFrame() {
   frameInPos = fileFramesCaptured;
 
-  String filePhoto_str = String("/sdcard/temp/" + String(cyclicalFramesCaptured + fileFramesCaptured) + ".jpg");
-  const char* filePhoto = filePhoto_str.c_str();
+  char frameNumber[7];
+  sprintf(frameNumber, "%06d", cyclicalFramesCaptured + fileFramesCaptured);
 
-  capturePhotoSaveSD(String(cyclicalFramesCaptured + fileFramesCaptured), "/sdcard/temp/");
+  char savePath[24];
 
-  REMAINING_BUFFER_FILES[frameInPos] = strdup(filePhoto);
+  strcpy(savePath, "/sdcard/temp/");
+  strcat(savePath, frameNumber);
+  strcat(savePath, ".jpg");
+
+  capturePhotoSaveSD(String(frameNumber), "/sdcard/temp/");
+
+  REMAINING_BUFFER_FILES[frameInPos] = strdup(savePath);
 
   fileFramesCaptured++;
 }
@@ -595,18 +607,18 @@ void addToFile(char* frameName) {
   //
   // We also write to the temporary idx file.  This keeps track of the offset & size of each frame.
   // This is read back later (before we close the AVI file) to update the idx1 chunk.
-  
-  FILE *frameFile = fopen(frameName, "w");
+
+  FILE *frameFile = fopen(frameName, "r");
 
   fseek(frameFile, 0L, SEEK_END);
   uint32_t rawFrameSize = ftell(frameFile);
   rewind(frameFile);
-
-  char* frame = (char*) malloc (sizeof(char)*rawFrameSize);
+  
+  uint8_t* frame = (uint8_t*) malloc (sizeof(uint8_t)*rawFrameSize);
+  
   fread (frame, 1, rawFrameSize, frameFile);
-
   fclose(frameFile);
-  //unlink(frameName);
+  Serial.println("File closed");
 
   size_t bytesWritten;
 
@@ -647,6 +659,8 @@ void addToFile(char* frameName) {
     return;
   }
 
+  free(frame);
+  unlink(frameName);
 
   // The frame from the camera contains a chunk header of JFIF (bytes 7-10) that we want to replace with AVI1.
   // So we move the write head back to where the frame was just written + 6 bytes. 
@@ -721,7 +735,14 @@ void closeFile() {
   // Update the AVI header with maximum bytes per second.
   uint32_t maxBytes = fileFramesTotalSize / fileDuration;  
   writeLittleEndian(maxBytes, aviFile, 0x24, FROM_START);
-  
+
+  // Update the AVI header with microseconds per frame.
+  writeLittleEndian(FRAME_INTERVAL * 1000, aviFile, 0x20, FROM_START);
+
+
+  //Update the AVI header with FPS.
+  writeLittleEndian(1000/FRAME_INTERVAL, aviFile, 0x84, FROM_START);
+
 
   // Update AVI header with total number of frames.
   writeLittleEndian(fileFramesWritten, aviFile, 0x30, FROM_START);
@@ -1366,7 +1387,6 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.stack_size = 30000;
   config.max_uri_handlers = 11;
   httpd_handle_t server = NULL;
 
