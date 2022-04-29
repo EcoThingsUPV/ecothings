@@ -104,6 +104,7 @@ const uint8_t       INIT_FRAMES     = 50;    // Number of frames that will be re
 const int           RECORDING_TIME  = 5000;  // Time for which the video will keep recording after motion detection signal was received
 char* BUFFER_REPEAT_FILES[INIT_FRAMES];      // Array used for storing filenames of images used in buffer repeat
 char* REMAINING_BUFFER_FILES[int(RECORDING_TIME/FRAME_INTERVAL)]; // Array used for storing filenames of all of the frames
+String videoTimeStamp;
 
 const byte buffer00dc   [4]  = {0x30, 0x30, 0x64, 0x63}; // "00dc"
 const byte buffer0000   [4]  = {0x00, 0x00, 0x00, 0x00}; // 0x00000000
@@ -209,8 +210,8 @@ enum relative                              // Used when setting position within 
 };
 
 //Video icon base64 encoded
-const char* video_miniature = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABmJLR0QA/wD/AP+gvaeTAAABeElEQVR4nO2ZMU7DMBhGnytOAis36ModGBCsPQJrK1bEBAKprEXiPoz0BEwIZsIQR02jJJCo6Zcm35MsWY3TPH/541YxGGOMMcaYcRKE154AF7G/An6ELhKugCS2S5XERHVh4DjXP1FJKAPoBQ5ALaDGAagF1DgAtYAaB6AWUOMA1AJqHIBaQI0DUAuo6TqAG+AbuKXZ26cA3MVzFx147Y0vNm99ntgOYZ47Ns99HuLY7Nhnl4JdV8Ay158Bj9RXQohjZhXfcXAE4J7N3UyAZ9LgixUQgIfC2CUDWKeqQliwHcAgJ59RfK4T4KOiX7ZeDIKySihrg7rzRf4KYdCTz6gKYRSTzyiGIJu8cqEJwHnsv5IGYfZNkwro+25u53692M2toZVfk4WnF7u5NbTyG83PThUOQC2gxgGoBdQ4ALWAmqOW502B612K7IBpm5PaBnAW28HT5BFYd2axe97/O7BJBaxI/2efNtbZL2/Ai1rCGGOMMcb0nV/wQ2Ny2wsxgAAAAABJRU5ErkJggg==";
-const char* delete_icon = "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";
+const char* video_miniature = "iVBORw0KGgoAAAANSUhEUgAAADIAAAAzCAYAAADVY1sUAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAIwSURBVGhD7dhLS1VRGMbxkxJaUISEpBndyEkFCQ3EiTrzMm2gg4ykiSNJnEZ+jJoEgpBQfYFGGU0ciKAWeEGziZVaWYQJXfw/p73guPBIbfY6vsJ64Mc5e4/2c/bZl/XmYmJi9kx58hkqh3ABF/EDmwiS0EVUoA9d+IV3CFYmZDoxiT8YRj2CpCz5DJUjOPz3a+4o3PfME7pIyRKLWEssYi2xiLXEItYSi1hLLGItsUhBrmEAt3FaO/4j1zGImzilHfuZ+1jBAu7hDFxuYAZaWD3BZbg0YgSrmEYrUieLM/ITWptrWXsHvSgss1tUoh9aQZ7E70TqZLFmX8dxnEMNNGxQsUXUoQXVeIMxnIdKtOME5vEQL/AdqZJFEf01lnEMrozOjspUogGuiAYP3eiAK/EAo/gAE7kC/bJr0DWhickrvE+2pzCOz8n2LO5i3y/y3XIV+oV1lnSwW9A15H+fg9kSLjozhWV8KqHbtekSLsXKHKgSLn6ZoCVCjkw/4i10p9KF/xjPoIs/8+gWGTq10K1ZT/+v2hEifhFt64FVBT3QPsFSih6f/9eyPj3/5+Mr2fQ8ZYoen//SWLLpecoUPb64sLKWWMRaYhFr8Z/sGhYMQUOCl9C9Wu9LVtKMHmgl+hQ61tfYs4hWenpypl5HB4gGFWehZ8iOIn7aMAG3frDsES4hH/+MaOpxC03Q4MBqvkDLgufIv1H7RbSt125NDCu0w2i+YQkb+a0Yc8nltgEFbqfQlAUutgAAAABJRU5ErkJggg==";
+const char* delete_icon = "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";
 
 //Variables for setting time. By default set to UTC +2.00.
 const int UTC = 2;
@@ -256,6 +257,8 @@ esp_err_t access_denied_get_handler(httpd_req_t *req);
 esp_err_t stream_handler(httpd_req_t *req);
 esp_err_t alarm_get_handler(httpd_req_t *req);
 esp_err_t motion_get_handler(httpd_req_t *req);
+esp_err_t image_display(httpd_req_t *req);
+esp_err_t delete_ask_handler(httpd_req_t *req);
 
 EMailSender emailSend(author_email, author_password);
 
@@ -480,6 +483,7 @@ void recordVideo() {
   int t0 = millis();
   fileOpen = startFile();
   Serial.println("Starting the file...");
+  capturePhotoSaveSD(videoTimeStamp, "/sdcard/images/");
 
   currentMillis = millis();
   while (fileOpen && currentMillis - t0 < RECORDING_TIME) {
@@ -549,9 +553,9 @@ void captureFrame() {
 }
 
 boolean startFile() {
-  String timeStamp = getTimeStamp();
+  videoTimeStamp = getTimeStamp();
 
-  String AVIFilename_str = "/sdcard/videos/" + timeStamp + ".avi";
+  String AVIFilename_str = "/sdcard/videos/" + videoTimeStamp + ".avi";
   const char* AVIFilename = AVIFilename_str.c_str();
 
   // Reset file statistics.
@@ -1056,6 +1060,40 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     videoName = strtok(fileName, "/");
     videoName = strtok(NULL, "/");
 
+    char* miniatureName = (char*)malloc((strlen(videoName) + 1)*sizeof(char));
+    strcpy(miniatureName, videoName);
+    miniatureName = strtok(miniatureName, ".");
+    strcat(miniatureName, ".jpg");
+
+    //Inserting video miniature
+    resp = "<br><center><img src = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = WiFi_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "/image?filename=";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = miniatureName;
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    free(miniatureName);
+
+    resp = "\"width=\"500\" height=\"375\"></a>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+    //Inserting video name
+    resp = "<center><p style = \"font-size:17px\"><b>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, videoName, HTTPD_RESP_USE_STRLEN);
+
+    resp = "</b></p></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
     //Inserting download button
     resp = "<br><center><a href=\"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
@@ -1074,12 +1112,12 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
 
     httpd_resp_send_chunk(req, video_miniature, HTTPD_RESP_USE_STRLEN);
 
-    resp = "\" width=\"100\" height=\"100\"></a>";
+    resp = "\" width=\"55\" height=\"55\"></a>";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
     //Gap between the icons
-    resp = "&nbsp &nbsp &nbsp &nbsp &nbsp";
+    resp = "&nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
@@ -1090,7 +1128,7 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     resp = WiFi_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = "/video_delete?filename=";
+    resp = "/delete_ask?filename=";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = videoName;
@@ -1101,16 +1139,19 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
 
     httpd_resp_send_chunk(req, delete_icon, HTTPD_RESP_USE_STRLEN);
 
-    resp = "\" width=\"100\" height=\"100\"></a></center>";
+    resp = "\" width=\"60\" height=\"60\"></a></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN); 
+
+
+    //Inserting buttons' description  
+    resp = "<center><p style = \"font-size:12px\"><b>Download video";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = "<center><p style = \"font-size:15px\"><b>";
+    resp = "&nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    httpd_resp_send_chunk(req, videoName, HTTPD_RESP_USE_STRLEN);
-
-    resp = "</b></p></center><br>";
-    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);   
+    resp = "Delete video</b></p></center><br><br><br><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
   }
 
   httpd_resp_send_chunk(req, NULL, 0);
@@ -1302,6 +1343,84 @@ esp_err_t delete_video_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+esp_err_t image_display(httpd_req_t *req) {
+  httpd_resp_set_type(req, "image/jpeg");
+
+  char filePath[35];
+  const char* rootPath = "/sdcard/images/";
+  char fileName[20];
+  char query[httpd_req_get_url_query_len(req) + 1];
+  
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "filename", fileName, 20);
+
+  strcpy(filePath, rootPath);
+  strcat(filePath, fileName);
+
+  FILE* fd = fopen(filePath, "r");
+
+  fseek(fd, 0L, SEEK_END);
+  ssize_t photoSize = ftell(fd);
+  rewind(fd);
+  
+  char* photo = (char*) malloc (sizeof(char)*photoSize);
+  
+  fread (photo, 1, photoSize, fd);
+  fclose(fd);
+
+  httpd_resp_send(req, photo, photoSize);
+  free(photo);
+
+  return ESP_OK;
+}
+
+esp_err_t delete_ask_handler(httpd_req_t *req) {
+  char fileName[20];
+  char query[httpd_req_get_url_query_len(req) + 1];
+
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "filename", fileName, 20);
+
+  httpd_resp_set_type(req, "text/html");
+
+  const char* resp = "<center><p style=\"font-size:30px\">Are you sure that you want to delete the file?</p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //Inserting YES button
+  resp = "<br><center><form method = \"GET\" action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/video_delete\">";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<input type = \"hidden\" name = \"filename\" value = \"";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = fileName;
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  
+  resp = "\"/><input type=\"submit\" value=\"YES\" style=\"height:60px; width:150px; font-size:20px\"/> </form>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "&nbsp &nbsp &nbsp";
+
+
+  //Inserting NO button
+  resp = "<form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/video\"><input type=\"submit\" value=\"NO\" style=\"height:60px; width:150px; font-size:20px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  return ESP_OK;
+}
+
 httpd_uri_t home_uri = {
   .uri = "/",
   .method = HTTP_GET,
@@ -1372,6 +1491,20 @@ httpd_uri_t delete_video_uri = {
   .user_ctx = NULL
 };
 
+httpd_uri_t image_display_uri = {
+  .uri = "/image",
+  .method = HTTP_GET,
+  .handler = image_display,
+  .user_ctx = NULL
+};
+
+httpd_uri_t delete_ask_uri = {
+  .uri = "/delete_ask",
+  .method = HTTP_GET,
+  .handler = delete_ask_handler,
+  .user_ctx = NULL
+};
+
 void startServer(){
   static struct file_server_data *server_data = NULL;
 
@@ -1387,7 +1520,7 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 11;
+  config.max_uri_handlers = 13;
   httpd_handle_t server = NULL;
 
   httpd_uri_t get_video_uri = {
@@ -1409,5 +1542,7 @@ void startServer(){
     httpd_register_uri_handler(server, &motion_uri);
     httpd_register_uri_handler(server, &get_video_uri);
     httpd_register_uri_handler(server, &delete_video_uri);
+    httpd_register_uri_handler(server, &image_display_uri);
+    httpd_register_uri_handler(server, &delete_ask_uri);
   }
 }
