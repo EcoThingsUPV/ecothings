@@ -258,7 +258,11 @@ esp_err_t stream_handler(httpd_req_t *req);
 esp_err_t alarm_get_handler(httpd_req_t *req);
 esp_err_t motion_get_handler(httpd_req_t *req);
 esp_err_t image_display(httpd_req_t *req);
-esp_err_t delete_ask_handler(httpd_req_t *req);
+esp_err_t video_delete_ask_handler(httpd_req_t *req);
+esp_err_t photo_gallery_get_handler(httpd_req_t *req);
+esp_err_t photo_delete_ask_handler(httpd_req_t *req);
+esp_err_t get_photo_handler(httpd_req_t *req);
+esp_err_t delete_photo_handler(httpd_req_t *req);
 
 EMailSender emailSend(author_email, author_password);
 
@@ -1038,6 +1042,15 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = WiFi_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+  resp = "/photos\"><input type=\"submit\" value=\"Photo gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
   resp = "/img\"><input type=\"submit\" value=\"Take an image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
@@ -1128,7 +1141,7 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     resp = WiFi_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = "/delete_ask?filename=";
+    resp = "/video_delete_ask?filename=";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = videoName;
@@ -1374,7 +1387,7 @@ esp_err_t image_display(httpd_req_t *req) {
   return ESP_OK;
 }
 
-esp_err_t delete_ask_handler(httpd_req_t *req) {
+esp_err_t video_delete_ask_handler(httpd_req_t *req) {
   char fileName[20];
   char query[httpd_req_get_url_query_len(req) + 1];
 
@@ -1418,6 +1431,241 @@ esp_err_t delete_ask_handler(httpd_req_t *req) {
   resp = "/video\"><input type=\"submit\" value=\"NO\" style=\"height:60px; width:150px; font-size:20px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+  httpd_resp_send_chunk(req, NULL, 0);
+  return ESP_OK;
+}
+
+esp_err_t photo_gallery_get_handler(httpd_req_t *req) {
+  SD_MMC.begin();
+  int nFiles = countFiles(SD_MMC, "/images", 0);
+  char* fileNames [nFiles];
+  listDir(SD_MMC, "/images", 0, fileNames, nFiles);
+
+  const char* resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam image gallery</b></p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  for (char* fileName : fileNames) {
+    char* photoName = NULL;
+    photoName = strtok(fileName, "/");
+    photoName = strtok(NULL, "/");
+
+    //Inserting image miniature
+    resp = "<br><center><img src = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = WiFi_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "/image?filename=";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = photoName;
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "\"width=\"500\" height=\"375\"></a>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+    //Inserting photo name
+    resp = "<center><p style = \"font-size:17px\"><b>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, photoName, HTTPD_RESP_USE_STRLEN);
+
+    resp = "</b></p></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+    //Inserting download button
+    resp = "<br><center><a href=\"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = WiFi_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "/photo_download?filename=";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = photoName;
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    
+    resp = "\"><img src = \"data:image/jpeg;base64,";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, video_miniature, HTTPD_RESP_USE_STRLEN);
+
+    resp = "\" width=\"55\" height=\"55\"></a>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+    //Gap between the icons
+    resp = "&nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+    //Inserting delete button
+    resp = "<a href=\"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = WiFi_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "/photo_delete_ask?filename=";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = photoName;
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    
+    resp = "\"><img src = \"data:image/jpeg;base64,";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, delete_icon, HTTPD_RESP_USE_STRLEN);
+
+    resp = "\" width=\"60\" height=\"60\"></a></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN); 
+
+
+    //Inserting buttons' description  
+    resp = "<center><p style = \"font-size:12px\"><b>Download photo";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "&nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp &nbsp";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "Delete photo</b></p></center><br><br><br><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  }
+
+  httpd_resp_send_chunk(req, NULL, 0);
+  return ESP_OK;
+}
+
+esp_err_t photo_delete_ask_handler(httpd_req_t *req) {
+  char fileName[20];
+  char query[httpd_req_get_url_query_len(req) + 1];
+
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "filename", fileName, 20);
+
+  httpd_resp_set_type(req, "text/html");
+
+  const char* resp = "<center><p style=\"font-size:30px\">Are you sure that you want to delete the file?</p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //Inserting YES button
+  resp = "<br><center><form method = \"GET\" action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/photo_delete\">";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<input type = \"hidden\" name = \"filename\" value = \"";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = fileName;
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  
+  resp = "\"/><input type=\"submit\" value=\"YES\" style=\"height:60px; width:150px; font-size:20px\"/> </form>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "&nbsp &nbsp &nbsp";
+
+
+  //Inserting NO button
+  resp = "<form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = WiFi_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/photos\"><input type=\"submit\" value=\"NO\" style=\"height:60px; width:150px; font-size:20px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, NULL, 0);
+  return ESP_OK;
+}
+
+esp_err_t get_photo_handler(httpd_req_t *req) {
+  char filePath[35];
+  const char* rootPath = "/sdcard/images/";
+  char fileName[20];
+  char query[httpd_req_get_url_query_len(req) + 1];
+  
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "filename", fileName, 20);
+
+  strcpy(filePath, rootPath);
+  strcat(filePath, fileName);
+
+  FILE* fd = fopen(filePath, "r");
+  Serial.println("Sending the file...");
+
+  httpd_resp_set_type(req, "image/jpeg");
+
+  char *chunk = ((struct file_server_data *)req->user_ctx)->scratch;
+  size_t chunksize;
+
+  do {
+    chunksize = fread(chunk, 1, SCRATCH_BUFSIZE, fd);
+
+    if (chunksize > 0) {
+      if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+        fclose(fd);
+        Serial.println("File sending failed!");
+        /* Abort sending file */
+        httpd_resp_sendstr_chunk(req, NULL);
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+        return ESP_FAIL;
+      }
+    }
+  } while (chunksize != 0);
+
+  fclose(fd);
+  Serial.println("File sending complete!");
+
+  #ifdef CONFIG_EXAMPLE_HTTPD_CONN_CLOSE_HEADER
+    httpd_resp_set_hdr(req, "Connection", "close");
+  #endif
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+esp_err_t delete_photo_handler(httpd_req_t *req) {
+  char filePath[35];
+  const char* rootPath = "/sdcard/images/";
+  char fileName[20];
+  char query[httpd_req_get_url_query_len(req) + 1];
+  
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "filename", fileName, 20);
+
+  strcpy(filePath, rootPath);
+  strcat(filePath, fileName);
+
+  struct stat file_stat;
+
+  if (stat(filePath, &file_stat) == -1) {
+        Serial.println("File does not exist");
+        /* Respond with 400 Bad Request */
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File does not exist");
+        return ESP_FAIL;
+  }
+
+  Serial.println("Deleting file");
+  /* Delete file */
+   unlink(filePath);
+
+  /* Redirect onto root to see the updated file list */
+  httpd_resp_set_status(req, "303 See Other");
+  httpd_resp_set_hdr(req, "Location", "/photos");
+#ifdef CONFIG_EXAMPLE_HTTPD_CONN_CLOSE_HEADER
+    httpd_resp_set_hdr(req, "Connection", "close");
+#endif
+  httpd_resp_sendstr(req, "File deleted successfully");
   return ESP_OK;
 }
 
@@ -1498,10 +1746,31 @@ httpd_uri_t image_display_uri = {
   .user_ctx = NULL
 };
 
-httpd_uri_t delete_ask_uri = {
-  .uri = "/delete_ask",
+httpd_uri_t video_delete_ask_uri = {
+  .uri = "/video_delete_ask",
   .method = HTTP_GET,
-  .handler = delete_ask_handler,
+  .handler = video_delete_ask_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t photo_gallery_get_uri = {
+  .uri = "/photos",
+  .method = HTTP_GET,
+  .handler = photo_gallery_get_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t photo_delete_ask_uri = {
+  .uri = "/photo_delete_ask",
+  .method = HTTP_GET,
+  .handler = photo_delete_ask_handler,
+  .user_ctx = NULL
+};
+
+httpd_uri_t delete_photo_uri = {
+  .uri = "/photo_delete",
+  .method = HTTP_GET,
+  .handler = delete_photo_handler,
   .user_ctx = NULL
 };
 
@@ -1520,13 +1789,20 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 13;
+  config.max_uri_handlers = 17;
   httpd_handle_t server = NULL;
 
   httpd_uri_t get_video_uri = {
   .uri = "/video_download",
   .method = HTTP_GET,
   .handler = get_video_handler,
+  .user_ctx = server_data
+};
+
+httpd_uri_t get_photo_uri = {
+  .uri = "/photo_download",
+  .method = HTTP_GET,
+  .handler = get_photo_handler,
   .user_ctx = server_data
 };
 
@@ -1543,6 +1819,10 @@ void startServer(){
     httpd_register_uri_handler(server, &get_video_uri);
     httpd_register_uri_handler(server, &delete_video_uri);
     httpd_register_uri_handler(server, &image_display_uri);
-    httpd_register_uri_handler(server, &delete_ask_uri);
+    httpd_register_uri_handler(server, &video_delete_ask_uri);
+    httpd_register_uri_handler(server, &photo_gallery_get_uri);
+    httpd_register_uri_handler(server, &photo_delete_ask_uri);
+    httpd_register_uri_handler(server, &get_photo_uri);
+    httpd_register_uri_handler(server, &delete_photo_uri);
   }
 }
