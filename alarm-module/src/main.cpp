@@ -30,7 +30,6 @@
 
 #define SCRATCH_BUFSIZE 8192
 
-#define PIR_PIN 0
 
 //definitions for ESP32-CAM
 #define PWDN_GPIO_NUM     32
@@ -73,8 +72,8 @@ const char* ap_ssid = "ESP32-cam";
 const char* ap_password =  "123456789";
 
 //WiFi parameters
-const char* ssid = "iPhone";
-const char* password = "123456789";
+const char* ssid = NULL;
+const char* password = NULL;
 
 //Static AP IP settings - ESP32-CAM will be accessible under this address for the devices in its network
 IPAddress AP_local_IP(192, 168, 1, 120);
@@ -99,7 +98,7 @@ int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the
 
 //Variables used by the video recording part
 const uint16_t      AVI_HEADER_SIZE = 252;   // Size of the AVI file header.
-const long unsigned FRAME_INTERVAL  = 100;   // Time (ms) between frame captures 
+const long unsigned FRAME_INTERVAL  = 120;   // Time (ms) between frame captures 
 const uint8_t       INIT_FRAMES     = 50;    // Number of frames that will be recorded before motion detection
 const int           RECORDING_TIME  = 5000;  // Time for which the video will keep recording after motion detection signal was received
 char* BUFFER_REPEAT_FILES[INIT_FRAMES];      // Array used for storing filenames of images used in buffer repeat
@@ -263,18 +262,27 @@ esp_err_t photo_gallery_get_handler(httpd_req_t *req);
 esp_err_t photo_delete_ask_handler(httpd_req_t *req);
 esp_err_t get_photo_handler(httpd_req_t *req);
 esp_err_t delete_photo_handler(httpd_req_t *req);
+esp_err_t configure_wifi_handler(httpd_req_t *req);
 
 EMailSender emailSend(author_email, author_password);
 
 void setup(){
-  //pinMode(PIR_PIN, INPUT);
 
   Serial.begin(115200);
   Serial.println("Starting the program...");
 
   WiFi.mode(WIFI_AP_STA);
   setupAP();
-  WiFi_IP = setupWiFi();
+
+  startServer();
+
+  while (ssid == NULL || password == NULL) {
+    delay(500);
+  }
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
@@ -284,14 +292,12 @@ void setup(){
 
   setupCamera();
 
-  startServer();
-
   initialiseSDCard();
 }
 
 void loop(){
   if (takeNewPhoto){
-  capturePhotoSaveSD(getTimeStamp(), "/sdcard/images/");
+    capturePhotoSaveSD(getTimeStamp(), "/sdcard/images/");
 
     while (!emailSent){
       if (WiFi.status() != WL_CONNECTED){
@@ -301,6 +307,7 @@ void loop(){
       emailSent = sendEmail(WiFi_IP);
     }
     Serial.println("Email was sent successfully!");
+    
 
     emailSent = false;
     takeNewPhoto = false;
@@ -315,6 +322,8 @@ void loop(){
     recordVideo();
   }
   alarmOn = false;
+
+
 
   delay(500);
 
@@ -364,6 +373,7 @@ void setupCamera(void){
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
+    setupCamera();
     return;
   }
 
@@ -435,7 +445,7 @@ void capturePhotoSaveSD(String photoFileName, String savePath){
   bool ok = 0;
 
   do {
-    Serial.println("Taking a photo...");
+    //Serial.println("Taking a photo...");
 
     fb = esp_camera_fb_get();
 
@@ -454,7 +464,7 @@ void capturePhotoSaveSD(String photoFileName, String savePath){
     }
     else {
       fwrite(fb->buf, 1, fb->len, photoFile);
-      Serial.println("Picture was saved!");
+      //Serial.println("Picture was saved!");
     }
 
     fclose(photoFile);
@@ -467,7 +477,6 @@ void recordVideo() {
   cyclicalFramesCaptured = 0;
 
   int lastPicTaken = millis();
-  //int lastPirMeasurement = millis();
   int currentMillis;
   while (!motionDetected || cyclicalFramesCaptured < INIT_FRAMES) {
     currentMillis = millis();
@@ -476,12 +485,6 @@ void recordVideo() {
       lastPicTaken = millis();
       runBufferRepeat();
     }
-
-    /***if (!motionDetected && currentMillis - lastPirMeasurement > 1500) {
-      lastPirMeasurement = millis();
-      motionDetected = digitalRead(PIR_PIN);
-      Serial.println(motionDetected);
-    }***/
   }
 
   int t0 = millis();
@@ -626,7 +629,6 @@ void addToFile(char* frameName) {
   
   fread (frame, 1, rawFrameSize, frameFile);
   fclose(frameFile);
-  Serial.println("File closed");
 
   size_t bytesWritten;
 
@@ -729,7 +731,6 @@ void closeFile() {
 
   // Calculate how long the AVI file runs for.
   unsigned long fileDuration = (INIT_FRAMES * FRAME_INTERVAL + RECORDING_TIME) / 1000UL;
-  Serial.println(fileDuration);
  
   // Update AVI header with total file size. This is the sum of:
   //   AVI header (252 bytes less the first 8 bytes)
@@ -968,15 +969,6 @@ boolean sendEmail(String WiFi_IP){
 
   message.subject = "ALARM! Movement was detected on the premises!";
   message.message = htmlMsg.c_str();
-  
-  EMailSender::FileDescriptior fileDescriptor[1];
-  fileDescriptor[0].filename = "event_recording.avi";
-  fileDescriptor[0].mime = "video/x-msvideo";
-  fileDescriptor[0].url = "/sdcard/event_recording.avi";
-  fileDescriptor[0].encode64 = true;
-  fileDescriptor[0].storageType = EMailSender::EMAIL_STORAGE_TYPE_FFAT;
-
-  //EMailSender::Attachments attachs = {1, fileDescriptor};
 
   EMailSender::Response resp = emailSend.send(recipient_email, message);
 
@@ -1669,6 +1661,31 @@ esp_err_t delete_photo_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+esp_err_t configure_wifi_handler(httpd_req_t *req) {
+  char ssid_value[40];
+  char password_value[40];
+
+  char query[httpd_req_get_url_query_len(req) + 1];
+
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "ssid", ssid_value, 40);
+  httpd_query_key_value(query, "password", password_value, 40);
+
+  ssid = ssid_value;
+  password = password_value;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFi.disconnect();
+    delay(500);
+  }
+
+  WiFi_IP = setupWiFi();
+
+  httpd_resp_send(req, "OK", HTTPD_RESP_USE_STRLEN);
+
+  return ESP_OK;
+}
+
 httpd_uri_t home_uri = {
   .uri = "/",
   .method = HTTP_GET,
@@ -1774,6 +1791,13 @@ httpd_uri_t delete_photo_uri = {
   .user_ctx = NULL
 };
 
+httpd_uri_t configure_wifi_uri = {
+  .uri = "/wifi_config",
+  .method = HTTP_GET,
+  .handler = configure_wifi_handler,
+  .user_ctx = NULL
+};
+
 void startServer(){
   static struct file_server_data *server_data = NULL;
 
@@ -1789,7 +1813,7 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 17;
+  config.max_uri_handlers = 18;
   httpd_handle_t server = NULL;
 
   httpd_uri_t get_video_uri = {
@@ -1824,5 +1848,6 @@ httpd_uri_t get_photo_uri = {
     httpd_register_uri_handler(server, &photo_delete_ask_uri);
     httpd_register_uri_handler(server, &get_photo_uri);
     httpd_register_uri_handler(server, &delete_photo_uri);
+    httpd_register_uri_handler(server, &configure_wifi_uri);
   }
 }
