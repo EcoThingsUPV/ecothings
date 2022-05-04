@@ -18,7 +18,6 @@
 #include <esp_camera.h>
 #include <esp_vfs_fat.h>
 #include <FS.h>
-#include <EmailSender.h>
 #include <esp_http_server.h>
 #include <EEPROM.h>
 #include <SD_MMC.h>
@@ -80,19 +79,12 @@ IPAddress AP_local_IP(192, 168, 1, 120);
 IPAddress AP_gateway(192, 168, 1, 1);
 IPAddress AP_subnet(255, 255, 0, 0);
 
-//Variables for email handling
-const char* smtp_host = "smtp.gmail.com";
-const int smtp_port = 465;
-const char* author_email = "ecothingsupv@gmail.com";
-const char* author_password = "fwlvzfcgyzzrleej";
-const char* recipient_email = "piotrek.laszkiewicz23@gmail.com";
-
 //Variables used in the main loop
 boolean takeNewPhoto = false;
 boolean emailSent = false;
 boolean motionDetected = false;
 boolean alarmOn = false;
-String WiFi_IP;
+String AP_IP;
 
 int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the access request
 
@@ -196,6 +188,8 @@ uint32_t fileFramesTotalSize = 0;          // Total size of frames in file.
 uint32_t fileStartTime       = 0;          // Used to calculate FPS. 
 uint32_t filePadding         = 0;          // Total padding in the file.  
 
+camera_fb_t *fb = NULL;
+
 boolean fileOpen        = false;           // This is set when we have an open AVI file.
 
 FILE *aviFile;                             // AVI file
@@ -224,7 +218,7 @@ const char* ntpServer = "pool.ntp.org";
 //Function handling for C++
 bool checkPhoto(const char* fileName);
 void capturePhotoSaveSD(String photoFileName, String savePath);
-void setupAP(void);
+void setupWiFi(void);
 void startServer();
 void setupCamera(void);
 void initialiseSDCard();
@@ -238,10 +232,9 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels, char* filenames[]
 
 int countFiles(fs::FS &fs, const char * dirname, uint8_t levels);
 
-String setupWiFi(void);
+String setupAP(void);
 String getTimeStamp(void);
 
-boolean sendEmail(String WiFi_IP);
 boolean startFile();
 
 uint8_t writeLittleEndian(uint32_t value, FILE *file, int32_t offset, relative position);
@@ -264,15 +257,13 @@ esp_err_t get_photo_handler(httpd_req_t *req);
 esp_err_t delete_photo_handler(httpd_req_t *req);
 esp_err_t configure_wifi_handler(httpd_req_t *req);
 
-EMailSender emailSend(author_email, author_password);
-
 void setup(){
 
   Serial.begin(115200);
   Serial.println("Starting the program...");
 
   WiFi.mode(WIFI_AP_STA);
-  setupAP();
+  AP_IP = setupAP();
 
   startServer();
 
@@ -298,41 +289,25 @@ void setup(){
 void loop(){
   if (takeNewPhoto){
     capturePhotoSaveSD(getTimeStamp(), "/sdcard/images/");
-
-    while (!emailSent){
-      if (WiFi.status() != WL_CONNECTED){
-        WiFi_IP = setupWiFi();
-      }
-      Serial.println("Sending the email...");
-      emailSent = sendEmail(WiFi_IP);
-    }
-    Serial.println("Email was sent successfully!");
-    
-
-    emailSent = false;
     takeNewPhoto = false;
-
   }
 
   if (WiFi.status() != WL_CONNECTED){
-    WiFi_IP = setupWiFi();
+    setupWiFi();
   }
 
   if (alarmOn) {
     recordVideo();
   }
-  alarmOn = false;
-
-
 
   delay(500);
 
 }
 
-void setupAP(void){
+String setupAP(void){
   Serial.println("Setting up AP...");
 
-  WiFi.softAP(ap_ssid, ap_password, 1, 1);
+  WiFi.softAP(ap_ssid, ap_password);
   delay(100);
 
   if (!WiFi.softAPConfig(AP_local_IP, AP_gateway, AP_subnet)) {
@@ -342,6 +317,7 @@ void setupAP(void){
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP setup with IP address: ");
   Serial.println(IP);
+  return IP.toString();
 }
 
 void setupCamera(void){
@@ -367,7 +343,7 @@ void setupCamera(void){
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_SVGA;
-  config.jpeg_quality = 15;
+  config.jpeg_quality = 25;
   config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
@@ -388,7 +364,7 @@ void setupCamera(void){
   s->set_framesize(s, FRAMESIZE_SVGA);
 }
 
-String setupWiFi(void){
+void setupWiFi(void){
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
 
@@ -398,8 +374,6 @@ String setupWiFi(void){
   }
   Serial.print("Connected to your WiFi network with IP address: ");
   Serial.println(WiFi.localIP());
-
-  return WiFi.localIP().toString();
 }
 
 void initialiseSDCard()
@@ -441,7 +415,6 @@ bool checkPhoto(const char* fileName) {
 }
 
 void capturePhotoSaveSD(String photoFileName, String savePath){
-  camera_fb_t *fb = NULL;
   bool ok = 0;
 
   do {
@@ -958,27 +931,6 @@ int countFiles(fs::FS &fs, const char * dirname, uint8_t levels){
   return fileCount;
 }
 
-boolean sendEmail(String WiFi_IP){
-  //esp_vfs_fat_sdmmc_unmount();
-
-  boolean status;
-  String htmlMsg = "Warning! Your ESP32 alarm module has detected movement on the premises. The image of the event is attached to this email.";
-
-  //Email content configuration
-  EMailSender::EMailMessage message;
-
-  message.subject = "ALARM! Movement was detected on the premises!";
-  message.message = htmlMsg.c_str();
-
-  EMailSender::Response resp = emailSend.send(recipient_email, message);
-
-  if (!resp.status) {
-    Serial.println("Error sending Email, " + resp.desc);
-    status = false;
-  }
-  return resp.status;
-}
-
 String getTimeStamp(void) {
   struct tm timeinfo;
   getLocalTime(&timeinfo);
@@ -1004,7 +956,7 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
@@ -1013,7 +965,7 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/alarm\"><input type=\"submit\" value=\"Turn the alarm mode on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
@@ -1022,7 +974,7 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/video\"><input type=\"submit\" value=\"Video gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
@@ -1031,7 +983,7 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/photos\"><input type=\"submit\" value=\"Photo gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
@@ -1040,7 +992,7 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/img\"><input type=\"submit\" value=\"Take an image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
@@ -1074,7 +1026,7 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     resp = "<br><center><img src = \"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = WiFi_IP.c_str();
+    resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = "/image?filename=";
@@ -1103,7 +1055,7 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     resp = "<br><center><a href=\"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = WiFi_IP.c_str();
+    resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = "/video_download?filename=";
@@ -1130,7 +1082,7 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
     resp = "<a href=\"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = WiFi_IP.c_str();
+    resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = "/video_delete_ask?filename=";
@@ -1209,11 +1161,14 @@ esp_err_t access_denied_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t stream_handler(httpd_req_t *req){
-  camera_fb_t * fb = NULL;
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
   uint8_t * _jpg_buf = NULL;
   char * part_buf[64];
+
+  if (fb != NULL) {
+    esp_camera_fb_return(fb);
+  }
 
   res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
   if(res != ESP_OK){
@@ -1362,6 +1317,15 @@ esp_err_t image_display(httpd_req_t *req) {
   strcpy(filePath, rootPath);
   strcat(filePath, fileName);
 
+  struct stat file_stat;
+
+  if (stat(filePath, &file_stat) == -1) {
+        Serial.println("File does not exist");
+        /* Respond with 400 Bad Request */
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File does not exist");
+        return ESP_FAIL;
+  }
+
   FILE* fd = fopen(filePath, "r");
 
   fseek(fd, 0L, SEEK_END);
@@ -1369,6 +1333,14 @@ esp_err_t image_display(httpd_req_t *req) {
   rewind(fd);
   
   char* photo = (char*) malloc (sizeof(char)*photoSize);
+
+  if (photo == NULL) {
+    Serial.println("Error loading file");
+        /* Respond with 400 Bad Request */
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Error loading file");
+        fclose(fd);
+        return ESP_FAIL;
+  }
   
   fread (photo, 1, photoSize, fd);
   fclose(fd);
@@ -1395,7 +1367,7 @@ esp_err_t video_delete_ask_handler(httpd_req_t *req) {
   resp = "<br><center><form method = \"GET\" action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/video_delete\">";
@@ -1417,7 +1389,7 @@ esp_err_t video_delete_ask_handler(httpd_req_t *req) {
   resp = "<form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/video\"><input type=\"submit\" value=\"NO\" style=\"height:60px; width:150px; font-size:20px\"/> </form></center>";
@@ -1445,7 +1417,7 @@ esp_err_t photo_gallery_get_handler(httpd_req_t *req) {
     resp = "<br><center><img src = \"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = WiFi_IP.c_str();
+    resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = "/image?filename=";
@@ -1472,7 +1444,7 @@ esp_err_t photo_gallery_get_handler(httpd_req_t *req) {
     resp = "<br><center><a href=\"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = WiFi_IP.c_str();
+    resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = "/photo_download?filename=";
@@ -1499,7 +1471,7 @@ esp_err_t photo_gallery_get_handler(httpd_req_t *req) {
     resp = "<a href=\"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = WiFi_IP.c_str();
+    resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = "/photo_delete_ask?filename=";
@@ -1548,7 +1520,7 @@ esp_err_t photo_delete_ask_handler(httpd_req_t *req) {
   resp = "<br><center><form method = \"GET\" action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/photo_delete\">";
@@ -1570,7 +1542,7 @@ esp_err_t photo_delete_ask_handler(httpd_req_t *req) {
   resp = "<form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = WiFi_IP.c_str();
+  resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/photos\"><input type=\"submit\" value=\"NO\" style=\"height:60px; width:150px; font-size:20px\"/> </form></center>";
@@ -1679,7 +1651,7 @@ esp_err_t configure_wifi_handler(httpd_req_t *req) {
     delay(500);
   }
 
-  WiFi_IP = setupWiFi();
+  setupWiFi();
 
   httpd_resp_send(req, "OK", HTTPD_RESP_USE_STRLEN);
 
