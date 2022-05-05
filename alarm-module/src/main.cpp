@@ -10,6 +10,7 @@
 
   Delete icon: <a target="_blank" href="https://icons8.com/icon/X4fWgHt6q9So/delete">Delete</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
   Download icon: <a target="_blank" href="https://icons8.com/icon/20FjgTazh8FG/download">Download</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
+  Home icon: <a target="_blank" href="https://icons8.com/icon/73/home">Home</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
 ***/
 
 #include <Arduino.h>
@@ -205,15 +206,13 @@ enum relative                              // Used when setting position within 
 //Video icon base64 encoded
 const char* video_miniature = "iVBORw0KGgoAAAANSUhEUgAAADIAAAAzCAYAAADVY1sUAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAIwSURBVGhD7dhLS1VRGMbxkxJaUISEpBndyEkFCQ3EiTrzMm2gg4ykiSNJnEZ+jJoEgpBQfYFGGU0ciKAWeEGziZVaWYQJXfw/p73guPBIbfY6vsJ64Mc5e4/2c/bZl/XmYmJi9kx58hkqh3ABF/EDmwiS0EVUoA9d+IV3CFYmZDoxiT8YRj2CpCz5DJUjOPz3a+4o3PfME7pIyRKLWEssYi2xiLXEItYSi1hLLGItsUhBrmEAt3FaO/4j1zGImzilHfuZ+1jBAu7hDFxuYAZaWD3BZbg0YgSrmEYrUieLM/ITWptrWXsHvSgss1tUoh9aQZ7E70TqZLFmX8dxnEMNNGxQsUXUoQXVeIMxnIdKtOME5vEQL/AdqZJFEf01lnEMrozOjspUogGuiAYP3eiAK/EAo/gAE7kC/bJr0DWhickrvE+2pzCOz8n2LO5i3y/y3XIV+oV1lnSwW9A15H+fg9kSLjozhWV8KqHbtekSLsXKHKgSLn6ZoCVCjkw/4i10p9KF/xjPoIs/8+gWGTq10K1ZT/+v2hEifhFt64FVBT3QPsFSih6f/9eyPj3/5+Mr2fQ8ZYoen//SWLLpecoUPb64sLKWWMRaYhFr8Z/sGhYMQUOCl9C9Wu9LVtKMHmgl+hQ61tfYs4hWenpypl5HB4gGFWehZ8iOIn7aMAG3frDsES4hH/+MaOpxC03Q4MBqvkDLgufIv1H7RbSt125NDCu0w2i+YQkb+a0Yc8nltgEFbqfQlAUutgAAAABJRU5ErkJggg==";
 const char* delete_icon = "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";
+const char* home_icon = "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAABmJLR0QA/wD/AP+gvaeTAAAESklEQVR4nO2cW4hVVRjHf5PmZOqYecm80N0IbwVJIhF4CbqI5IPUg0QPMk+Cj736GPjki6DgiyBGoEQmiJIiFhVkqZGEReXMkKSpqTilmfawzkHd+9tnzsy+fXuf/w82DJu11/rW95t1ztprr31ACFFvVgBfA181/hYl0QW8D9wEbjeOW8AHwH0lxtWR9AC7uSMienwKTCotug7jOeAUyTKax0/AgpJi7BjWAteIJ/9c44iev9a4RmTMaMJ3gzUSjgGPA7OALxPKbAXGFB51TZkJfIGd6B3A2LvKdgObE8p+AzxWWNQ15RXgLPHk/g2sa3Fd0kfbeeDVHOOtLV3ABuAG8aSeARa1UcfzwM/G9TeBjWhq3DYTgI+wP3b2AQ8Po64eYE9CXZ8AD2UWdU15FviBePLS3PA1byD/M+o9DcxLuG6oaXX0qB1vAX8R7+gF4LUM6l8K/GHUfxV42yjfsUKaU9pbxDv5HfBkhm3NJqx7JU2N77+rbEcKmQp8RvKU9sEc2uwGtiW0eRR4tFGu44S8DPxOvGP/EGZYefMuMGi0fw5YZpyPUishaae0WbGo0WY0Diu2KLUQMh7YhT3kDwOPlBDTZGB/Qky1FvIMcJJ4R5pT2lHlhdZyalxLIauBy8Q7cQlYVWJcUVYRYrKErI6UraSQUYRlCus/7xTh2YY3ngZOYI/kzdyZGldOyBTgAPZ/205gXHmhDckDwHbs2I8A043zrlkM9BMP+jqwvsS4hst6QszRflh9c0svdicGgCUlxjVSXgR+o4I3hu0M86oyBThIhYQ8BRzH/iLcRFivqjqjCX2x1txuE3LggjeBi8QDvAKsKTGuvEiaGl8mPjUulFY3Uz8Cc8sLLXfmAN/j6Ca31XLDx8DEogMqgfHAh9g5OARMKyqQF4BfjCD+JYyYrqICcUIv9mJkH/BS3o23WrJennfjjin8UUI34YmaNTw/B2bk0WjFmEZBD9tmE7b6Ww1pR+C9tNph+S3wRNoGkjYGDALvpa28xrxD2DwRzdufjHDDhvXuRfM4DcxPHXL9yWxL0yRgr1FR8+jJMuqa00NyHvfSxjssC7G3X7pds6kArXLZcg/BSuwprYSkY6h8DhJyH2PAKGzNrsTwaCenfdaFfZFCWwhTWglJRzR/Ywi5jX50xXiDMEp+5d7XwCQkHUn5W0vI9QDwevNkO+tOUQmdtlaVlmHlTy+tOENCnCEhzpAQZ0iIMyTEGRLiDAlxhoQ4w+OOwqKXZ1ytPGiEOENCnCEhzvD4HRIl6894148QNEKcISHOkBBnSIgzJMQZEuIMCXGGhDhDQpwhIc6QEGdIiDMkxBkS4gwJcYaEOENCnCEhzpAQZ0iIMyTEGRLiDAlxhoQ4Q0KcISHOkBBnSIgzJMQZEuIMCXGGhDhDQpwxkt/LEunQ72VViXaEDOQeRefQP1SBdoT0IilZ0E/IpRBCCCGEKJz/AWeKZltjdKpGAAAAAElFTkSuQmCC";
 
 //Variables for setting time. By default set to UTC +2.00.
 const int UTC = 2;
 const long gmtOffset_sec = UTC*60*60;
 const int daylightOffset_sec = 3600;       //Takes into account the daylight saving time
 const char* ntpServer = "pool.ntp.org";
-
-//This defines the time between two detections of motion that cause sending an email
-#define pirDelayTime 45000
 
 //Function handling for C++
 bool checkPhoto(const char* fileName);
@@ -245,7 +244,6 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req);
 esp_err_t img_get_handler(httpd_req_t *req);
 esp_err_t access_get_handler(httpd_req_t *req);
 esp_err_t access_granted_get_handler(httpd_req_t *req);
-esp_err_t access_denied_get_handler(httpd_req_t *req);
 esp_err_t stream_handler(httpd_req_t *req);
 esp_err_t alarm_get_handler(httpd_req_t *req);
 esp_err_t motion_get_handler(httpd_req_t *req);
@@ -267,6 +265,14 @@ void setup(){
 
   startServer();
 
+  if (!SPIFFS.begin()){
+    Serial.println("SPIFFS failed to initialize!");
+  }
+
+  setupCamera();
+
+  initialiseSDCard();
+
   while (ssid == NULL || password == NULL) {
     delay(500);
   }
@@ -276,14 +282,6 @@ void setup(){
   }
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  if (!SPIFFS.begin()){
-    Serial.println("SPIFFS failed to initialize!");
-  }
-
-  setupCamera();
-
-  initialiseSDCard();
 }
 
 void loop(){
@@ -349,6 +347,7 @@ void setupCamera(void){
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
+    esp_camera_deinit();
     setupCamera();
     return;
   }
@@ -953,6 +952,8 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   const char* resp = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP32 camera system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+
+  //Inserting see camera image button
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
@@ -962,6 +963,8 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+
+  //Inserting alarm mode button
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
@@ -971,6 +974,8 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "/alarm\"><input type=\"submit\" value=\"Turn the alarm mode on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+
+  //Inserting video gallery button
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
@@ -980,6 +985,8 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "/video\"><input type=\"submit\" value=\"Video gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+
+  //Inserting photo gallery button
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
@@ -989,6 +996,8 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   resp = "/photos\"><input type=\"submit\" value=\"Photo gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+
+  //Inserting take an image button
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
@@ -996,6 +1005,17 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = "/img\"><input type=\"submit\" value=\"Take an image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+  //Inserting open the door button
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/access_granted\"><input type=\"submit\" value=\"Open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   httpd_resp_send_chunk(req, NULL, 0);
@@ -1009,7 +1029,22 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
   char* fileNames [nFiles];
   listDir(SD_MMC, "/videos", 0, fileNames, nFiles);
 
-  const char* resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam video gallery</b></p></center>";
+  //Inserting home button
+  const char* resp = "<a href=\"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/\"><img src = \"data:image/jpeg;base64,";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
+
+  resp = "\" width=\"55\" height=\"55\"></a>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  
+  resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam video gallery</b></p></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   for (char* fileName : fileNames) {
@@ -1116,16 +1151,53 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t img_get_handler(httpd_req_t *req) {
-  const char resp[] = "Image request was sent to ESP32-CAM";
   takeNewPhoto = true;
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //Inserting home button
+  const char* resp = "<a href=\"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/\"><img src = \"data:image/jpeg;base64,";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
+
+  resp = "\" width=\"55\" height=\"55\"></a>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<center><p style=\"font-size:35px\"><b>Image request was sent to ESP32-CAM</b></p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_send_chunk(req, NULL, 0);
+
   return ESP_OK;
 }
 
 esp_err_t alarm_get_handler(httpd_req_t *req) {
-  const char resp[] = "Alarm mode on";
   alarmOn = true;
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //Inserting home button
+  const char* resp = "<a href=\"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/\"><img src = \"data:image/jpeg;base64,";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
+
+  resp = "\" width=\"55\" height=\"55\"></a>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "<center><p style=\"font-size:20px\"><b>Alarm mode is on!</b></p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, NULL, 0);
+
   return ESP_OK;
 }
 
@@ -1147,20 +1219,31 @@ esp_err_t access_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t access_granted_get_handler(httpd_req_t *req) {
-  const char resp[] = "You have granted the access.";
+  //Inserting home button
+  const char* resp = "<a href=\"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/\"><img src = \"data:image/jpeg;base64,";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
+
+  resp = "\" width=\"55\" height=\"55\"></a>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+  resp = "<center><p style=\"font-size:20px\"><b>Access was granted</b></p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
   accessAnswer = 1;
   httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
-esp_err_t access_denied_get_handler(httpd_req_t *req) {
-  const char resp[] = "You have denied the access.";
-  accessAnswer = 0;
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-  return ESP_OK;
-}
-
-esp_err_t stream_handler(httpd_req_t *req){
+esp_err_t stream_handler(httpd_req_t *req) {
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
   uint8_t * _jpg_buf = NULL;
@@ -1405,7 +1488,23 @@ esp_err_t photo_gallery_get_handler(httpd_req_t *req) {
   char* fileNames [nFiles];
   listDir(SD_MMC, "/images", 0, fileNames, nFiles);
 
-  const char* resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam image gallery</b></p></center>";
+  //Inserting home button
+  const char* resp = "<a href=\"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = "/\"><img src = \"data:image/jpeg;base64,";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
+
+  resp = "\" width=\"55\" height=\"55\"></a>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+  resp = "<center><p style=\"font-size:35px\"><b>ESP32-cam image gallery</b></p></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   for (char* fileName : fileNames) {
@@ -1707,13 +1806,6 @@ httpd_uri_t access_granted_uri = {
   .user_ctx = NULL
 };
 
-httpd_uri_t access_denied_uri = {
-  .uri = "/access_denied",
-  .method = HTTP_GET,
-  .handler = access_denied_get_handler,
-  .user_ctx = NULL
-};
-
 httpd_uri_t stream_uri = {
   .uri = "/stream",
   .method = HTTP_GET,
@@ -1785,7 +1877,7 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 18;
+  config.max_uri_handlers = 17;
   httpd_handle_t server = NULL;
 
   httpd_uri_t get_video_uri = {
@@ -1806,7 +1898,6 @@ httpd_uri_t get_photo_uri = {
     httpd_register_uri_handler(server, &img_uri);
     httpd_register_uri_handler(server, &access_uri);
     httpd_register_uri_handler(server, &access_granted_uri);
-    httpd_register_uri_handler(server, &access_denied_uri);
     httpd_register_uri_handler(server, &home_uri);
     httpd_register_uri_handler(server, &video_gallery_uri);
     httpd_register_uri_handler(server, &stream_uri);
