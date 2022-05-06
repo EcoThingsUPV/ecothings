@@ -8,6 +8,10 @@
 
   The above copyright notice and this permission notice shall be included in all copies or substantial portions of this part of the software.
 
+  The image taking part was inspired by: https://randomnerdtutorials.com/esp32-cam-take-photo-save-microsd-card/
+
+  The video recording part was adapted from: https://github.com/red-car-nz/Video_Camera/blob/main/Video_Camera.ino
+
   Delete icon: <a target="_blank" href="https://icons8.com/icon/X4fWgHt6q9So/delete">Delete</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
   Download icon: <a target="_blank" href="https://icons8.com/icon/20FjgTazh8FG/download">Download</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
   Home icon: <a target="_blank" href="https://icons8.com/icon/73/home">Home</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
@@ -82,7 +86,6 @@ IPAddress AP_subnet(255, 255, 0, 0);
 
 //Variables used in the main loop
 boolean takeNewPhoto = false;
-boolean emailSent = false;
 boolean motionDetected = false;
 boolean alarmOn = false;
 String AP_IP;
