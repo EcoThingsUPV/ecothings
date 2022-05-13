@@ -38,7 +38,6 @@
 
 #define SCRATCH_BUFSIZE 8192
 
-
 //definitions for ESP32-CAM
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
@@ -281,7 +280,7 @@ void setup(){
 
   initialiseSDCard();
 
-  //Alarm mode turn off maybe a switch (call it save motion, set time, manually force motion detection)
+  //set time, manually force motion detection)
   //Take image should return an actual image name so it can be reused to send an image to device
   //Return the name of the video
 
@@ -989,6 +988,17 @@ esp_err_t home_get_handler(httpd_req_t *req) {
 
     else {
       resp = "/alarm\"><input type=\"hidden\" name=\"on\" value=\"0\"><input type=\"submit\" value=\"Turn the save motion off\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+      httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+      //Inserting the trigger video save button
+      resp = "<br><center><form method=\"GET\" action = \"http://";
+      httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+      resp = AP_IP.c_str();
+      httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+      resp = "/motion_detected\"><input type=\"submit\" value=\"Trigger video save\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
       httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
     }
 
