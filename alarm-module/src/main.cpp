@@ -29,6 +29,9 @@
 #include <time.h>
 #include <esp_vfs.h>
 #include <ArduinoSort.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+#include "driver/sdmmc_host.h"
 
 #define PART_BOUNDARY "123456789000000000000987654321"
 
@@ -260,21 +263,29 @@ esp_err_t configure_wifi_handler(httpd_req_t *req);
 
 void setup(){
 
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   Serial.println("Starting the program...");
 
   WiFi.mode(WIFI_AP_STA);
   AP_IP = setupAP();
+  delay(500);
 
   startServer();
-
-  if (!SPIFFS.begin()){
-    Serial.println("SPIFFS failed to initialize!");
-  }
+  delay(500);
 
   setupCamera();
+  delay(500);
 
   initialiseSDCard();
+
+  //Add an option to manually set the time instead of wifi
+  //Alarm mode turn off maybe a switch (call it save motion, set time, manually force motion detection)
+  //Delete open the door
+  //Take image should return an actual image name so it can be reused to send an image to device
+  //Return the name of the video
+  //Stay in alarm mode after motion detected
 
   while (ssid == NULL || password == NULL) {
     delay(500);
@@ -489,7 +500,6 @@ void recordVideo() {
 
   closeFile();
   motionDetected = false;
-  alarmOn = false;
 }
 
 void runBufferRepeat() {
