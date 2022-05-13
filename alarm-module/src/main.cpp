@@ -457,6 +457,9 @@ void recordVideo() {
   int lastPicTaken = millis();
   int currentMillis;
   while (!motionDetected || cyclicalFramesCaptured < INIT_FRAMES) {
+    if (!alarmOn) {
+      return;
+    }
     currentMillis = millis();
 
     if (currentMillis - lastPicTaken > FRAME_INTERVAL) {
@@ -972,15 +975,22 @@ esp_err_t home_get_handler(httpd_req_t *req) {
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
-    //Inserting alarm mode button
-    resp = "<br><center><form action = \"http://";
+    //Inserting the save motion mode button
+    resp = "<br><center><form method=\"GET\" action = \"http://";
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
     resp = AP_IP.c_str();
     httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-    resp = "/alarm\"><input type=\"submit\" value=\"Turn the alarm mode on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    if (!alarmOn) {
+      resp = "/alarm\"><input type=\"hidden\" name=\"on\" value=\"1\"><input type=\"submit\" value=\"Turn the save motion on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+      httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    }
+
+    else {
+      resp = "/alarm\"><input type=\"hidden\" name=\"on\" value=\"0\"><input type=\"submit\" value=\"Turn the save motion off\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+      httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    }
 
 
     //Inserting video gallery button
@@ -1214,27 +1224,25 @@ esp_err_t img_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t alarm_get_handler(httpd_req_t *req) {
-  alarmOn = true;
+  char on[2];
 
-  //Inserting home button
-  const char* resp = "<a href=\"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  char query[httpd_req_get_url_query_len(req) + 1];
 
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "on", on, 2);
 
-  resp = "/\"><img src = \"data:image/jpeg;base64,";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  if (on[0] == '1') {
+    alarmOn = true;
+  }
 
-  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
+  else {
+    alarmOn = false;
+  }
 
-  resp = "\" width=\"55\" height=\"55\"></a>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_set_status(req, "303 See Other");
+  httpd_resp_set_hdr(req, "Location", "/");
 
-  resp = "<center><p style=\"font-size:20px\"><b>Alarm mode is on!</b></p></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  httpd_resp_send_chunk(req, NULL, 0);
+  httpd_resp_sendstr(req, "Motion recording is on");
 
   return ESP_OK;
 }
