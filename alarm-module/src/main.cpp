@@ -93,8 +93,6 @@ boolean motionDetected = false;
 boolean alarmOn = false;
 String AP_IP;
 
-int accessAnswer = -1; //-1 means that the ESP32-CAM did not get response to the access request
-
 //Variables used by the video recording part
 const uint16_t      AVI_HEADER_SIZE = 252;   // Size of the AVI file header.
 const long unsigned FRAME_INTERVAL  = 120;   // Time (ms) between frame captures 
@@ -1221,41 +1219,6 @@ esp_err_t motion_get_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-esp_err_t access_get_handler(httpd_req_t *req) {
-  String accAns = String(accessAnswer);
-  const char* resp = accAns.c_str();
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-  if (accessAnswer != -1) {
-    accessAnswer = -1;
-  }
-  return ESP_OK;
-}
-
-esp_err_t access_granted_get_handler(httpd_req_t *req) {
-  //Inserting home button
-  const char* resp = "<a href=\"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = "/\"><img src = \"data:image/jpeg;base64,";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
-
-  resp = "\" width=\"55\" height=\"55\"></a>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-
-  resp = "<center><p style=\"font-size:20px\"><b>Access was granted</b></p></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  accessAnswer = 1;
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-  return ESP_OK;
-}
-
 esp_err_t stream_handler(httpd_req_t *req) {
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
@@ -1805,20 +1768,6 @@ httpd_uri_t motion_uri = {
   .user_ctx = NULL
 };
 
-httpd_uri_t access_uri = {
-  .uri = "/access",
-  .method = HTTP_GET,
-  .handler = access_get_handler,
-  .user_ctx = NULL
-};
-
-httpd_uri_t access_granted_uri = {
-  .uri = "/access_granted",
-  .method = HTTP_GET,
-  .handler = access_granted_get_handler,
-  .user_ctx = NULL
-};
-
 httpd_uri_t stream_uri = {
   .uri = "/stream",
   .method = HTTP_GET,
@@ -1890,7 +1839,7 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 17;
+  config.max_uri_handlers = 15;
   httpd_handle_t server = NULL;
 
   httpd_uri_t get_video_uri = {
@@ -1909,8 +1858,6 @@ httpd_uri_t get_photo_uri = {
 
   if (httpd_start(&server, &config) == ESP_OK) {
     httpd_register_uri_handler(server, &img_uri);
-    httpd_register_uri_handler(server, &access_uri);
-    httpd_register_uri_handler(server, &access_granted_uri);
     httpd_register_uri_handler(server, &home_uri);
     httpd_register_uri_handler(server, &video_gallery_uri);
     httpd_register_uri_handler(server, &stream_uri);
