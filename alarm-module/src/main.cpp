@@ -27,6 +27,7 @@
 #include <EEPROM.h>
 #include <SD_MMC.h>
 #include <time.h>
+#include <ESP32Time.h>
 #include <esp_vfs.h>
 #include <ArduinoSort.h>
 #include "soc/soc.h"
@@ -217,6 +218,8 @@ const int UTC = 2;
 const long gmtOffset_sec = UTC*60*60;
 const int daylightOffset_sec = 3600;       //Takes into account the daylight saving time
 const char* ntpServer = "pool.ntp.org";
+bool timeSet = false;
+ESP32Time rtc;
 
 //Function handling for C++
 bool checkPhoto(const char* fileName);
@@ -278,22 +281,13 @@ void setup(){
 
   initialiseSDCard();
 
-  //Add an option to manually set the time instead of wifi
   //Alarm mode turn off maybe a switch (call it save motion, set time, manually force motion detection)
-  //Delete open the door
   //Take image should return an actual image name so it can be reused to send an image to device
   //Return the name of the video
-  //Stay in alarm mode after motion detected
 
-  while (ssid == NULL || password == NULL) {
-    delay(500);
+  while (!timeSet) {
+    delay(1000);
   }
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
-
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 }
 
 void loop(){
@@ -302,7 +296,7 @@ void loop(){
     takeNewPhoto = false;
   }
 
-  if (WiFi.status() != WL_CONNECTED){
+  if (WiFi.status() != WL_CONNECTED && password != NULL && ssid != NULL){
     setupWiFi();
   }
 
@@ -960,74 +954,107 @@ String getTimeStamp(void) {
 esp_err_t home_get_handler(httpd_req_t *req) {
   httpd_resp_set_type(req, "text/html");
 
-  const char* resp = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP32 camera system.</b></p></center> <center><p style=\"font-size:30px\">Please select the right action from below:</p></center>";
+  const char* resp = "<center><p style=\"font-size:40px\"><b>You logged in to the ESP32 camera system.</b></p></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
+  if (timeSet) {
+    resp = "<center><p style=\"font-size:30px\">Please select the right action from below:</p></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  //Inserting see camera image button
-  resp = "<br><center><form action = \"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    //Inserting see camera image button
+    resp = "<br><center><form action = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = AP_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-
-  //Inserting alarm mode button
-  resp = "<br><center><form action = \"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = "/alarm\"><input type=\"submit\" value=\"Turn the alarm mode on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = "/stream\"><input type=\"submit\" value=\"See camera image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
-  //Inserting video gallery button
-  resp = "<br><center><form action = \"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    //Inserting alarm mode button
+    resp = "<br><center><form action = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = AP_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = "/video\"><input type=\"submit\" value=\"Video gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-
-  //Inserting photo gallery button
-  resp = "<br><center><form action = \"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = "/photos\"><input type=\"submit\" value=\"Photo gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = "/alarm\"><input type=\"submit\" value=\"Turn the alarm mode on\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
-  //Inserting take an image button
-  resp = "<br><center><form action = \"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    //Inserting video gallery button
+    resp = "<br><center><form action = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = AP_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = "/img\"><input type=\"submit\" value=\"Take an image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = "/video\"><input type=\"submit\" value=\"Video gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
-  //Inserting open the door button
-  resp = "<br><center><form action = \"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    //Inserting photo gallery button
+    resp = "<br><center><form action = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = AP_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = "/access_granted\"><input type=\"submit\" value=\"Open the door\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+    resp = "/photos\"><input type=\"submit\" value=\"Photo gallery\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+    //Inserting take an image button
+    resp = "<br><center><form action = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = AP_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = "/img\"><input type=\"submit\" value=\"Take an image\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  }
+
+  else {
+    resp = "<center><p style=\"font-size:25px\">Connect to WiFi or set the time manually below to use the camera. Do not put 0's before single digits!</p></center>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Inserting time fields
+    resp = "<br><center><form action = \"http://";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    resp = AP_IP.c_str();
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Year field
+    resp = "/set_time\"><label for=\"yy\">Year: &nbsp&nbsp&nbsp</label><input type=\"text\" id=\"yy\" name=\"yy\"><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Month field
+    resp = "<label for=\"mm\">Month: &nbsp</label><input type=\"text\" id=\"mm\" name=\"mm\"><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Day field
+    resp = "<label for=\"dd\">Day: &nbsp&nbsp&nbsp&nbsp</label><input type=\"text\" id=\"dd\" name=\"dd\"><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Hour field
+    resp = "<label for=\"hh\">Hour: &nbsp&nbsp&nbsp</label><input type=\"text\" id=\"hh\" name=\"hh\"><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Minute field
+    resp = "<label for=\"min\">Minute: &nbsp</label><input type=\"text\" id=\"min\" name=\"min\"><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Seconds field
+    resp = "<label for=\"ss\">Seconds: </label><input type=\"text\" id=\"ss\" name=\"ss\"><br><br>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    //Submit button
+    resp = "<input type=\"submit\" value=\"Submit\"></form>";
+    httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  }
 
   httpd_resp_send_chunk(req, NULL, 0);
 
@@ -1728,7 +1755,55 @@ esp_err_t configure_wifi_handler(httpd_req_t *req) {
 
   setupWiFi();
 
+  if (!timeSet) {
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    timeSet = true;
+  }
+
   httpd_resp_send(req, "OK", HTTPD_RESP_USE_STRLEN);
+
+  return ESP_OK;
+}
+
+esp_err_t configure_time_handler(httpd_req_t *req) {
+  char year_char[5];
+  char month_char[3];
+  char day_char[3];
+  char hour_char[3];
+  char minute_char[3];
+  char second_char[3];
+
+  int year;
+  int month;
+  int day;
+  int hour;
+  int minute;
+  int second;
+
+  char query[httpd_req_get_url_query_len(req) + 1];
+
+  httpd_req_get_url_query_str(req, query, httpd_req_get_url_query_len(req) + 1);
+  httpd_query_key_value(query, "yy", year_char, 5);
+  httpd_query_key_value(query, "mm", month_char, 3);
+  httpd_query_key_value(query, "dd", day_char, 3);
+  httpd_query_key_value(query, "hh", hour_char, 3);
+  httpd_query_key_value(query, "min", minute_char, 3);
+  httpd_query_key_value(query, "ss", second_char, 3);
+
+  sscanf(year_char, "%d", &year);
+  sscanf(month_char, "%d", &month);
+  sscanf(day_char, "%d", &day);
+  sscanf(hour_char, "%d", &hour);
+  sscanf(minute_char, "%d", &minute);
+  sscanf(second_char, "%d", &second);
+
+  rtc.setTime(second, minute, hour, day, month, year);
+  timeSet = true;
+
+  httpd_resp_set_status(req, "303 See Other");
+  httpd_resp_set_hdr(req, "Location", "/");
+
+  httpd_resp_sendstr(req, "Time was set");
 
   return ESP_OK;
 }
@@ -1824,6 +1899,13 @@ httpd_uri_t configure_wifi_uri = {
   .user_ctx = NULL
 };
 
+httpd_uri_t configure_time_uri = {
+  .uri = "/set_time",
+  .method = HTTP_GET,
+  .handler = configure_time_handler,
+  .user_ctx = NULL
+};
+
 void startServer(){
   static struct file_server_data *server_data = NULL;
 
@@ -1839,7 +1921,7 @@ void startServer(){
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 15;
+  config.max_uri_handlers = 16;
   httpd_handle_t server = NULL;
 
   httpd_uri_t get_video_uri = {
@@ -1872,5 +1954,6 @@ httpd_uri_t get_photo_uri = {
     httpd_register_uri_handler(server, &get_photo_uri);
     httpd_register_uri_handler(server, &delete_photo_uri);
     httpd_register_uri_handler(server, &configure_wifi_uri);
+    httpd_register_uri_handler(server, &configure_time_uri);
   }
 }
