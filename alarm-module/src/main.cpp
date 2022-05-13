@@ -88,10 +88,10 @@ IPAddress AP_gateway(192, 168, 1, 1);
 IPAddress AP_subnet(255, 255, 0, 0);
 
 //Variables used in the main loop
-boolean takeNewPhoto = false;
 boolean motionDetected = false;
 boolean alarmOn = false;
 String AP_IP;
+String lastPicName;
 
 //Variables used by the video recording part
 const uint16_t      AVI_HEADER_SIZE = 252;   // Size of the AVI file header.
@@ -280,9 +280,8 @@ void setup(){
 
   initialiseSDCard();
 
-  //set time, manually force motion detection)
-  //Take image should return an actual image name so it can be reused to send an image to device
-  //Return the name of the video
+  //set time, manually force motion detection) for next week
+  //Return the name of the video, but where?
 
   while (!timeSet) {
     delay(1000);
@@ -290,10 +289,6 @@ void setup(){
 }
 
 void loop(){
-  if (takeNewPhoto){
-    capturePhotoSaveSD(getTimeStamp(), "/sdcard/images/");
-    takeNewPhoto = false;
-  }
 
   if (WiFi.status() != WL_CONNECTED && password != NULL && ssid != NULL){
     setupWiFi();
@@ -420,9 +415,9 @@ bool checkPhoto(const char* fileName) {
 
 void capturePhotoSaveSD(String photoFileName, String savePath){
   bool ok = 0;
+  lastPicName = photoFileName + ".jpg";
 
   do {
-    //Serial.println("Taking a photo...");
 
     fb = esp_camera_fb_get();
 
@@ -448,6 +443,7 @@ void capturePhotoSaveSD(String photoFileName, String savePath){
     esp_camera_fb_return(fb);
     ok = checkPhoto(filePhoto);
   } while(!ok);
+
 }
 
 void recordVideo() {
@@ -1209,26 +1205,15 @@ esp_err_t video_gallery_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t img_get_handler(httpd_req_t *req) {
-  takeNewPhoto = true;
+  capturePhotoSaveSD(getTimeStamp(), "/sdcard/images/");
 
-  //Inserting home button
-  const char* resp = "<a href=\"http://";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_set_status(req, "303 See Other");
+  httpd_resp_set_hdr(req, "Location", "/photos");
 
-  resp = AP_IP.c_str();
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+  delay(200);
 
-  resp = "/\"><img src = \"data:image/jpeg;base64,";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  httpd_resp_send_chunk(req, home_icon, HTTPD_RESP_USE_STRLEN);
-
-  resp = "\" width=\"55\" height=\"55\"></a>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-
-  resp = "<center><p style=\"font-size:35px\"><b>Image request was sent to ESP32-CAM</b></p></center>";
-  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-  httpd_resp_send_chunk(req, NULL, 0);
+  httpd_resp_sendstr(req, lastPicName.c_str());
+  Serial.println(lastPicName);
 
   return ESP_OK;
 }
@@ -1258,9 +1243,11 @@ esp_err_t alarm_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t motion_get_handler(httpd_req_t *req) {
-  const char resp[] = "OK";
   motionDetected = true;
-  httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_set_status(req, "303 See Other");
+  httpd_resp_set_hdr(req, "Location", "/");
+
+  httpd_resp_sendstr(req, "Recording triggered");
   return ESP_OK;
 }
 
