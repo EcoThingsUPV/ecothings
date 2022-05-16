@@ -99,7 +99,7 @@ const long unsigned FRAME_INTERVAL  = 120;   // Time (ms) between frame captures
 const uint8_t       INIT_FRAMES     = 50;    // Number of frames that will be recorded before motion detection
 const int           RECORDING_TIME  = 5000;  // Time for which the video will keep recording after motion detection signal was received
 char* BUFFER_REPEAT_FILES[INIT_FRAMES];      // Array used for storing filenames of images used in buffer repeat
-char* REMAINING_BUFFER_FILES[int(RECORDING_TIME/FRAME_INTERVAL)]; // Array used for storing filenames of all of the frames
+char* REMAINING_BUFFER_FILES[int(RECORDING_TIME/FRAME_INTERVAL)]; // Array used for storing filenames of all the frames
 String videoTimeStamp;
 
 const byte buffer00dc   [4]  = {0x30, 0x30, 0x64, 0x63}; // "00dc"
@@ -279,9 +279,6 @@ void setup(){
   delay(500);
 
   initialiseSDCard();
-
-  //set time, manually force motion detection) for next week
-  //Return the name of the video, but where?
 
   while (!timeSet) {
     delay(1000);
