@@ -1207,16 +1207,14 @@ esp_err_t img_get_handler(httpd_req_t *req) {
   httpd_resp_set_status(req, "303 See Other");
   httpd_resp_set_hdr(req, "Location", "/photos");
 
-  delay(200);
-
   httpd_resp_sendstr(req, lastPicName.c_str());
-  Serial.println(lastPicName);
 
   return ESP_OK;
 }
 
 esp_err_t alarm_get_handler(httpd_req_t *req) {
   char on[2];
+  const char* resp;
 
   char query[httpd_req_get_url_query_len(req) + 1];
 
@@ -1225,16 +1223,18 @@ esp_err_t alarm_get_handler(httpd_req_t *req) {
 
   if (on[0] == '1') {
     alarmOn = true;
+    resp = "Motion recording is on";
   }
 
   else {
     alarmOn = false;
+    resp = "Motion recording is off";
   }
 
   httpd_resp_set_status(req, "303 See Other");
   httpd_resp_set_hdr(req, "Location", "/");
 
-  httpd_resp_sendstr(req, "Motion recording is on");
+  httpd_resp_sendstr(req, resp);
 
   return ESP_OK;
 }
