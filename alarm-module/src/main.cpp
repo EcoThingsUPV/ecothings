@@ -532,7 +532,6 @@ void captureFrame() {
 }
 
 boolean startFile() {
-  videoTimeStamp = getTimeStamp();
 
   String AVIFilename_str = "/sdcard/videos/" + videoTimeStamp + ".avi";
   const char* AVIFilename = AVIFilename_str.c_str();
@@ -1240,11 +1239,12 @@ esp_err_t alarm_get_handler(httpd_req_t *req) {
 }
 
 esp_err_t motion_get_handler(httpd_req_t *req) {
+  videoTimeStamp = getTimeStamp();
   motionDetected = true;
   httpd_resp_set_status(req, "303 See Other");
   httpd_resp_set_hdr(req, "Location", "/");
 
-  httpd_resp_sendstr(req, "Recording triggered");
+  httpd_resp_sendstr(req, videoTimeStamp.c_str());
   return ESP_OK;
 }
 
