@@ -1018,17 +1018,15 @@ esp_err_t home_get_handler(httpd_req_t *req) {
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
-  if (!timeSet) {
-  //Inserting set clock button
+  //Inserting settings button
   resp = "<br><center><form action = \"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   resp = AP_IP.c_str();
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
-  resp = "/time_settings\"><input type=\"submit\" value=\"Set the clock\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
+  resp = "/settings\"><input type=\"submit\" value=\"Settings\" style=\"height:60px; width:350px; font-size:30px\"/> </form></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
-  }
 
   httpd_resp_send_chunk(req, NULL, 0);
 
@@ -1786,7 +1784,7 @@ esp_err_t configure_time_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-esp_err_t time_settings_handler(httpd_req_t *req) {
+esp_err_t settings_menu_handler(httpd_req_t *req) {
   //Inserting home button
   const char* resp = "<a href=\"http://";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
@@ -1803,7 +1801,8 @@ esp_err_t time_settings_handler(httpd_req_t *req) {
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
 
-  resp = "<center><p style=\"font-size:30px\"><b>Set the time manually below.</b></p></center>";
+  //Inserting the time part
+  resp = "<center><p style=\"font-size:30px\"><b>Set the time manually:</b></p></center>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Inserting time fields
@@ -1814,31 +1813,55 @@ esp_err_t time_settings_handler(httpd_req_t *req) {
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Year field
-  resp = "/set_time\"><label for=\"yy\">Year: &nbsp&nbsp&nbsp</label><input type=\"text\" id=\"yy\" name=\"yy\"><br><br>";
+  resp = "/set_time\"><label for=\"yy\">Year: &nbsp&nbsp&nbsp&nbsp</label><input type=\"text\" id=\"yy\" name=\"yy\"><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Month field
-  resp = "<label for=\"mm\">Month: &nbsp</label><input type=\"text\" id=\"mm\" name=\"mm\"><br><br>";
+  resp = "<label for=\"mm\">Month: &nbsp&nbsp</label><input type=\"text\" id=\"mm\" name=\"mm\"><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Day field
-  resp = "<label for=\"dd\">Day: &nbsp&nbsp&nbsp&nbsp</label><input type=\"text\" id=\"dd\" name=\"dd\"><br><br>";
+  resp = "<label for=\"dd\">Day: &nbsp&nbsp&nbsp&nbsp&nbsp</label><input type=\"text\" id=\"dd\" name=\"dd\"><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Hour field
-  resp = "<label for=\"hh\">Hour: &nbsp&nbsp&nbsp</label><input type=\"text\" id=\"hh\" name=\"hh\"><br><br>";
+  resp = "<label for=\"hh\">Hour: &nbsp&nbsp&nbsp&nbsp</label><input type=\"text\" id=\"hh\" name=\"hh\"><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Minute field
-  resp = "<label for=\"min\">Minute: &nbsp</label><input type=\"text\" id=\"min\" name=\"min\"><br><br>";
+  resp = "<label for=\"min\">Minute: &nbsp&nbsp</label><input type=\"text\" id=\"min\" name=\"min\"><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Seconds field
-  resp = "<label for=\"ss\">Seconds: </label><input type=\"text\" id=\"ss\" name=\"ss\"><br><br>";
+  resp = "<label for=\"ss\">Seconds: &nbsp</label><input type=\"text\" id=\"ss\" name=\"ss\"><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   //Submit button
-  resp = "<input type=\"submit\" value=\"Submit\"></form>";
+  resp = "<input type=\"submit\" value=\"Set the time\"></form><br><br>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+
+  //Inerting the WiFi part
+  resp = "<center><p style=\"font-size:30px\"><b>Connect to WiFi network:</b></p></center>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //WiFi fields
+  resp = "<br><center><form action = \"http://";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  resp = AP_IP.c_str();
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //SSID field
+  resp = "/wifi_config\"><label for=\"ssid\">SSID: &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp</label><input type=\"text\" id=\"ssid\" name=\"ssid\"><br><br>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //Password field
+  resp = "<label for=\"password\">Password: </label><input type=\"text\" id=\"password\" name=\"password\"><br><br>";
+  httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
+
+  //Submit button
+  resp = "<input type=\"submit\" value=\"Connect\"></form><br><br>";
   httpd_resp_send_chunk(req, resp, HTTPD_RESP_USE_STRLEN);
 
   httpd_resp_send_chunk(req, NULL, 0);
@@ -1944,10 +1967,10 @@ httpd_uri_t configure_time_uri = {
   .user_ctx = NULL
 };
 
-httpd_uri_t time_settings_uri = {
-  .uri = "/time_settings",
+httpd_uri_t settings_menu_uri = {
+  .uri = "/settings",
   .method = HTTP_GET,
-  .handler = time_settings_handler,
+  .handler = settings_menu_handler,
   .user_ctx = NULL
 };
 
@@ -2000,6 +2023,6 @@ httpd_uri_t get_photo_uri = {
     httpd_register_uri_handler(server, &delete_photo_uri);
     httpd_register_uri_handler(server, &configure_wifi_uri);
     httpd_register_uri_handler(server, &configure_time_uri);
-    httpd_register_uri_handler(server, &time_settings_uri);
+    httpd_register_uri_handler(server, &settings_menu_uri);
   }
 }
